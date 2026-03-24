@@ -212,21 +212,14 @@ export default function App() {
       >
         {/* Logo */}
         <div
-          className="flex items-center gap-3 px-3 py-4 border-b shrink-0"
+          className="flex items-center justify-center px-3 py-4 border-b shrink-0"
           style={{ borderColor: "hsl(var(--sidebar-border))" }}
         >
-          <div
-            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-            style={{ background: "hsl(var(--primary))" }}
-          >
-            <Icon name="Wrench" size={16} className="text-white" />
-          </div>
-          {sidebarOpen && (
-            <div className="min-w-0 animate-slide-in">
-              <p className="text-sm font-semibold text-foreground truncate leading-tight">{tenant}</p>
-              <p className="text-xs text-muted-foreground">AutoCRM</p>
-            </div>
-          )}
+          <img
+            src="https://cdn.poehali.dev/projects/bb9a0de0-c4f3-43a3-86ce-c6d3cbe383e8/bucket/f5ecea76-05c7-4ea3-8a23-e7fd1b8ad69a.png"
+            alt="VINADMIN"
+            className={sidebarOpen ? "h-8" : "h-6"}
+          />
         </div>
 
         {/* Nav */}
