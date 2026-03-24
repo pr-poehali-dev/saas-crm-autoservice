@@ -1,5 +1,5 @@
 /**
- * CRUD-обработчик для модуля Записи (appointments). TypeScript v2.
+ * CRUD-обработчик для модуля Записи (appointments). TypeScript v3.
  * Поддерживает: GET список, GET одна запись, POST создание, PUT обновление.
  * Мультитенантность через заголовок X-Tenant-Id.
  */
