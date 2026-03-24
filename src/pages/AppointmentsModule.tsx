@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import Icon from "@/components/ui/icon";
 
 interface Employee {
@@ -6,26 +6,14 @@ interface Employee {
   name: string;
   role: string;
   color: string;
+  borderColor: string;
 }
 
-interface ScheduleAppointment {
+interface AppointmentItem {
+  id: string;
   empId: number;
-  time: string;
-  customer: string;
-  service: string;
-  type: "appointment";
-}
-
-interface ScheduleLock {
-  empId: number;
-  time: string;
-  label: string;
-  type: "lock";
-}
-
-type ScheduleItem = ScheduleAppointment | ScheduleLock;
-
-interface CreateForm {
+  startSlot: number;
+  duration: number;
   customer: string;
   phone: string;
   carBrand: string;
@@ -35,29 +23,29 @@ interface CreateForm {
   note: string;
 }
 
+interface LockItem {
+  empId: number;
+  startSlot: number;
+  duration: number;
+  label: string;
+}
+
+const SLOT_H = 56;
+const COL_W = 176;
+
 const employees: Employee[] = [
-  { id: 1, name: "Иван С.", role: "Моторист", color: "border-blue-500 bg-blue-500/15 text-blue-400" },
-  { id: 2, name: "Алексей Д.", role: "Электрик", color: "border-yellow-500 bg-yellow-500/15 text-yellow-400" },
-  { id: 3, name: "Сергей В.", role: "Ходовая", color: "border-green-500 bg-green-500/15 text-green-400" },
-  { id: 4, name: "Дмитрий К.", role: "Диагност", color: "border-purple-500 bg-purple-500/15 text-purple-400" },
-  { id: 5, name: "Андрей М.", role: "Кузовщик", color: "border-red-500 bg-red-500/15 text-red-400" },
-  { id: 6, name: "Максим П.", role: "Маляр", color: "border-pink-500 bg-pink-500/15 text-pink-400" },
-  { id: 7, name: "Владимир Т.", role: "Шиномонтаж", color: "border-indigo-500 bg-indigo-500/15 text-indigo-400" },
+  { id: 1, name: "Иван С.", role: "Моторист", color: "bg-blue-500/15 text-blue-400", borderColor: "rgb(59,130,246)" },
+  { id: 2, name: "Алексей Д.", role: "Электрик", color: "bg-yellow-500/15 text-yellow-400", borderColor: "rgb(234,179,8)" },
+  { id: 3, name: "Сергей В.", role: "Ходовая", color: "bg-green-500/15 text-green-400", borderColor: "rgb(34,197,94)" },
+  { id: 4, name: "Дмитрий К.", role: "Диагност", color: "bg-purple-500/15 text-purple-400", borderColor: "rgb(168,85,247)" },
+  { id: 5, name: "Андрей М.", role: "Кузовщик", color: "bg-red-500/15 text-red-400", borderColor: "rgb(239,68,68)" },
+  { id: 6, name: "Максим П.", role: "Маляр", color: "bg-pink-500/15 text-pink-400", borderColor: "rgb(236,72,153)" },
+  { id: 7, name: "Владимир Т.", role: "Шиномонтаж", color: "bg-indigo-500/15 text-indigo-400", borderColor: "rgb(99,102,241)" },
 ];
 
-const initialSchedule: ScheduleItem[] = [
-  { empId: 1, time: "10:00", customer: "BMW X5", service: "Замена ГРМ", type: "appointment" },
-  { empId: 1, time: "13:00", label: "Обед", type: "lock" },
-  { empId: 2, time: "09:30", customer: "Toyota Camry", service: "Проводка", type: "appointment" },
-  { empId: 2, time: "14:00", label: "Тех. обслуживание", type: "lock" },
-  { empId: 3, time: "11:00", customer: "Audi A4", service: "Замена стоек", type: "appointment" },
-  { empId: 3, time: "15:30", customer: "Kia Sportage", service: "Сход-развал", type: "appointment" },
-  { empId: 4, time: "12:30", customer: "Mercedes C200", service: "Диагностика", type: "appointment" },
-  { empId: 4, time: "16:00", label: "Обучение", type: "lock" },
-  { empId: 5, time: "10:30", customer: "Kia Rio", service: "Окрас крыла", type: "appointment" },
-  { empId: 6, time: "09:00", customer: "Hyundai Tucson", service: "Полировка", type: "appointment" },
-  { empId: 7, time: "11:30", customer: "VW Polo", service: "Шиномонтаж R16", type: "appointment" },
-  { empId: 7, time: "14:30", customer: "Honda CR-V", service: "Балансировка", type: "appointment" },
+const locks: LockItem[] = [
+  { empId: 1, startSlot: 8, duration: 2, label: "Обед" },
+  { empId: 4, startSlot: 14, duration: 2, label: "Обучение" },
 ];
 
 function generateTimeSlots() {
@@ -70,6 +58,15 @@ function generateTimeSlots() {
 }
 
 const timeSlots = generateTimeSlots();
+
+function slotToTime(slot: number): string {
+  const hour = Math.floor(slot / 2) + 9;
+  const min = slot % 2 === 0 ? "00" : "30";
+  return `${hour}:${min}`;
+}
+
+let idCounter = 1;
+function genId() { return `appt-${Date.now()}-${idCounter++}`; }
 
 const WEEK_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const MONTH_NAMES = [
@@ -85,29 +82,14 @@ function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date; onSelect
     const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
     const firstDay = new Date(viewYear, viewMonth, 1).getDay();
     const offset = firstDay === 0 ? 6 : firstDay - 1;
-    return {
-      days: Array.from({ length: daysInMonth }, (_, i) => i + 1),
-      startOffset: offset,
-    };
+    return { days: Array.from({ length: daysInMonth }, (_, i) => i + 1), startOffset: offset };
   }, [viewMonth, viewYear]);
 
-  const prev = () => {
-    if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
-    else setViewMonth(viewMonth - 1);
-  };
+  const prev = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); } else setViewMonth(viewMonth - 1); };
+  const next = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else setViewMonth(viewMonth + 1); };
 
-  const next = () => {
-    if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
-    else setViewMonth(viewMonth + 1);
-  };
-
-  const isSelected = (d: number) =>
-    d === selectedDate.getDate() && viewMonth === selectedDate.getMonth() && viewYear === selectedDate.getFullYear();
-
-  const isToday = (d: number) => {
-    const now = new Date();
-    return d === now.getDate() && viewMonth === now.getMonth() && viewYear === now.getFullYear();
-  };
+  const isSelected = (d: number) => d === selectedDate.getDate() && viewMonth === selectedDate.getMonth() && viewYear === selectedDate.getFullYear();
+  const isToday = (d: number) => { const now = new Date(); return d === now.getDate() && viewMonth === now.getMonth() && viewYear === now.getFullYear(); };
 
   return (
     <div className="rounded-xl p-4" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}>
@@ -119,32 +101,24 @@ function MiniCalendar({ selectedDate, onSelect }: { selectedDate: Date; onSelect
         </div>
       </div>
       <div className="grid grid-cols-7 gap-1 text-center mb-2">
-        {WEEK_DAYS.map((d) => (
-          <span key={d} className="text-[10px] font-bold text-muted-foreground uppercase">{d}</span>
-        ))}
+        {WEEK_DAYS.map((d) => <span key={d} className="text-[10px] font-bold text-muted-foreground uppercase">{d}</span>)}
       </div>
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: startOffset }).map((_, i) => <div key={`e-${i}`} className="h-7" />)}
         {days.map((d) => (
-          <button
-            key={d}
-            onClick={() => onSelect(new Date(viewYear, viewMonth, d))}
+          <button key={d} onClick={() => onSelect(new Date(viewYear, viewMonth, d))}
             className={`h-7 w-7 text-xs rounded-full flex items-center justify-center transition-colors
               ${isSelected(d) ? "bg-[hsl(var(--primary))] text-white font-bold" :
                 isToday(d) ? "ring-1 ring-[hsl(var(--primary))] text-[hsl(var(--primary))] font-bold hover:bg-secondary" :
                 "text-muted-foreground hover:bg-secondary"}`}
-          >
-            {d}
-          </button>
+          >{d}</button>
         ))}
       </div>
     </div>
   );
 }
 
-function empInitials(name: string) {
-  return name.split(" ").map((p) => p[0]).join("").toUpperCase();
-}
+function empInitials(name: string) { return name.split(" ").map((p) => p[0]).join("").toUpperCase(); }
 
 function InputField({ label, value, onChange, placeholder, type = "text" }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
@@ -152,61 +126,49 @@ function InputField({ label, value, onChange, placeholder, type = "text" }: {
   return (
     <div>
       <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         className="w-full px-3 py-2 rounded-lg text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
-        style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}
-      />
+        style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }} />
     </div>
   );
 }
 
-function CreateModal({ empId, time, onClose, onCreated }: {
-  empId: number; time: string; onClose: () => void; onCreated: (item: ScheduleAppointment) => void;
+function AppointmentModal({ item, emp, onClose, onSave, onDelete }: {
+  item: AppointmentItem; emp: Employee; onClose: () => void;
+  onSave: (data: AppointmentItem) => void; onDelete?: (id: string) => void;
 }) {
-  const emp = employees.find((e) => e.id === empId)!;
-  const [form, setForm] = useState<CreateForm>({
-    customer: "",
-    phone: "",
-    carBrand: "",
-    carModel: "",
-    carPlate: "",
-    service: "",
-    note: "",
+  const isEdit = !!item.customer;
+  const [form, setForm] = useState({
+    customer: item.customer,
+    phone: item.phone,
+    carBrand: item.carBrand,
+    carModel: item.carModel,
+    carPlate: item.carPlate,
+    service: item.service,
+    note: item.note,
+    duration: item.duration,
   });
 
-  const set = (k: keyof CreateForm, v: string) => setForm((f) => ({ ...f, [k]: v }));
-
+  const set = (k: string, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
   const canSubmit = form.customer.trim() && form.service.trim();
 
   const submit = () => {
     if (!canSubmit) return;
-    const customerLabel = [form.carBrand, form.carModel].filter(Boolean).join(" ") || form.customer;
-    onCreated({
-      empId,
-      time,
-      customer: customerLabel,
-      service: form.service,
-      type: "appointment",
-    });
+    onSave({ ...item, ...form });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
-      <div
-        className="w-full max-w-lg rounded-xl border p-0 overflow-hidden animate-fade-in"
-        style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-lg rounded-xl border overflow-hidden animate-fade-in"
+        style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "hsl(var(--border))" }}>
           <div>
-            <h2 className="text-base font-bold text-foreground">Новая запись</h2>
+            <h2 className="text-base font-bold text-foreground">{isEdit ? "Редактирование записи" : "Новая запись"}</h2>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-muted-foreground">{emp.name} · {emp.role}</span>
-              <span className="text-xs font-bold" style={{ color: "hsl(var(--primary))" }}>{time}</span>
+              <span className="text-xs font-bold" style={{ color: "hsl(var(--primary))" }}>{slotToTime(item.startSlot)}</span>
             </div>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-secondary transition-colors">
@@ -230,33 +192,46 @@ function CreateModal({ empId, time, onClose, onCreated }: {
 
           <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-2">Работы</div>
           <InputField label="Услуга / работа" value={form.service} onChange={(v) => set("service", v)} placeholder="Замена масла, диагностика..." />
+
+          <div>
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Длительность</label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 6].map((d) => (
+                <button key={d} onClick={() => set("duration", d)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${form.duration === d
+                    ? "text-white" : "text-muted-foreground hover:bg-secondary"}`}
+                  style={form.duration === d ? { background: "hsl(var(--primary))" } : {}}>
+                  {d * 30} мин
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Примечание</label>
-            <textarea
-              rows={2}
-              value={form.note}
-              onChange={(e) => set("note", e.target.value)}
-              placeholder="Любые заметки..."
+            <textarea rows={2} value={form.note} onChange={(e) => set("note", e.target.value)} placeholder="Любые заметки..."
               className="w-full px-3 py-2 rounded-lg text-sm text-foreground resize-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
-              style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}
-            />
+              style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }} />
           </div>
         </div>
 
         <div className="flex gap-2 px-6 py-4 border-t" style={{ borderColor: "hsl(var(--border))" }}>
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-muted-foreground hover:bg-secondary transition-colors"
-          >
+          {isEdit && onDelete && (
+            <button onClick={() => { onDelete(item.id); onClose(); }}
+              className="px-4 py-2.5 rounded-lg text-xs font-bold text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-1.5">
+              <Icon name="Trash2" size={14} />
+              Удалить
+            </button>
+          )}
+          <div className="flex-1" />
+          <button onClick={onClose}
+            className="px-4 py-2.5 rounded-lg text-sm font-bold text-muted-foreground hover:bg-secondary transition-colors">
             Отмена
           </button>
-          <button
-            onClick={submit}
-            disabled={!canSubmit}
-            className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-white hover:opacity-90 transition-opacity disabled:opacity-30"
-            style={{ background: "hsl(var(--primary))" }}
-          >
-            Записать
+          <button onClick={submit} disabled={!canSubmit}
+            className="px-5 py-2.5 rounded-lg text-sm font-bold text-white hover:opacity-90 transition-opacity disabled:opacity-30"
+            style={{ background: "hsl(var(--primary))" }}>
+            {isEdit ? "Сохранить" : "Записать"}
           </button>
         </div>
       </div>
@@ -266,24 +241,146 @@ function CreateModal({ empId, time, onClose, onCreated }: {
 
 export default function AppointmentsModule() {
   const [selectedDate, setSelectedDate] = useState(new Date(2026, 2, 25));
-  const [items, setItems] = useState<ScheduleItem[]>(initialSchedule);
-  const [createSlot, setCreateSlot] = useState<{ empId: number; time: string } | null>(null);
+  const [items, setItems] = useState<AppointmentItem[]>([]);
+  const [modalState, setModalState] = useState<{ item: AppointmentItem; emp: Employee } | null>(null);
+
+  const dragRef = useRef<{ id: string; offsetSlot: number } | null>(null);
+  const [dragGhost, setDragGhost] = useState<{ empId: number; slot: number; duration: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const clickBlockRef = useRef(false);
 
   const dayStr = selectedDate.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
-  const appointmentCount = items.filter((i) => i.type === "appointment").length;
+  const getSlotFromY = useCallback((y: number): number => {
+    if (!gridRef.current) return 0;
+    const rect = gridRef.current.getBoundingClientRect();
+    const relY = y - rect.top + gridRef.current.scrollTop;
+    return Math.max(0, Math.min(timeSlots.length - 1, Math.floor(relY / SLOT_H)));
+  }, []);
 
-  const handleCreated = (newItem: ScheduleAppointment) => {
-    setItems((prev) => [...prev, newItem]);
+  const getEmpFromX = useCallback((x: number): number => {
+    if (!gridRef.current) return employees[0].id;
+    const rect = gridRef.current.getBoundingClientRect();
+    const relX = x - rect.left + gridRef.current.scrollLeft - 56;
+    const idx = Math.max(0, Math.min(employees.length - 1, Math.floor(relX / COL_W)));
+    return employees[idx].id;
+  }, []);
+
+  const isSlotOccupied = useCallback((empId: number, slot: number, duration: number, excludeId?: string) => {
+    for (const it of items) {
+      if (it.id === excludeId) continue;
+      if (it.empId === empId && slot < it.startSlot + it.duration && slot + duration > it.startSlot) return true;
+    }
+    for (const lk of locks) {
+      if (lk.empId === empId && slot < lk.startSlot + lk.duration && slot + duration > lk.startSlot) return true;
+    }
+    return false;
+  }, [items]);
+
+  const handleDragStart = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    const slot = getSlotFromY(e.clientY);
+    dragRef.current = { id, offsetSlot: slot - item.startSlot };
+    setDragGhost({ empId: item.empId, slot: item.startSlot, duration: item.duration });
+    clickBlockRef.current = false;
+
+    const onMove = (ev: MouseEvent) => {
+      clickBlockRef.current = true;
+      setIsDragging(true);
+      const newSlot = Math.max(0, Math.min(timeSlots.length - 1, getSlotFromY(ev.clientY) - (dragRef.current?.offsetSlot || 0)));
+      const newEmp = getEmpFromX(ev.clientX);
+      setDragGhost({ empId: newEmp, slot: newSlot, duration: item.duration });
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (clickBlockRef.current) {
+        const finalSlot = Math.max(0, Math.min(timeSlots.length - item.duration, getSlotFromY(ev.clientY) - (dragRef.current?.offsetSlot || 0)));
+        const finalEmp = getEmpFromX(ev.clientX);
+        if (!isSlotOccupied(finalEmp, finalSlot, item.duration, id)) {
+          setItems((prev) => prev.map((i) => i.id === id ? { ...i, empId: finalEmp, startSlot: finalSlot } : i));
+        }
+      }
+      setIsDragging(false);
+      setDragGhost(null);
+      dragRef.current = null;
+      setTimeout(() => { clickBlockRef.current = false; }, 50);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const handleResizeStart = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clickBlockRef.current = true;
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    setIsResizing(true);
+
+    const onMove = (ev: MouseEvent) => {
+      const slot = getSlotFromY(ev.clientY);
+      const newDuration = Math.max(1, Math.min(12, slot - item.startSlot + 1));
+      if (!isSlotOccupied(item.empId, item.startSlot, newDuration, id)) {
+        setItems((prev) => prev.map((i) => i.id === id ? { ...i, duration: newDuration } : i));
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      setIsResizing(false);
+      setTimeout(() => { clickBlockRef.current = false; }, 50);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  const handleCellClick = (empId: number, slot: number) => {
+    if (isDragging || isResizing || clickBlockRef.current) return;
+    if (isSlotOccupied(empId, slot, 2) && isSlotOccupied(empId, slot, 1)) return;
+    const emp = employees.find((e) => e.id === empId)!;
+    const dur = isSlotOccupied(empId, slot, 2) ? 1 : 2;
+    const newItem: AppointmentItem = {
+      id: genId(), empId, startSlot: slot, duration: dur,
+      customer: "", phone: "", carBrand: "", carModel: "", carPlate: "", service: "", note: "",
+    };
+    setModalState({ item: newItem, emp });
+  };
+
+  const handleItemClick = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (isDragging || isResizing || clickBlockRef.current) return;
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    const emp = employees.find((em) => em.id === item.empId)!;
+    setModalState({ item, emp });
+  };
+
+  const handleSave = (data: AppointmentItem) => {
+    setItems((prev) => {
+      const exists = prev.find((i) => i.id === data.id);
+      if (exists) return prev.map((i) => i.id === data.id ? data : i);
+      return [...prev, data];
+    });
+  };
+
+  const handleDelete = (id: string) => {
+    setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
   return (
     <div className="flex gap-0 h-full">
-      {/* Sidebar */}
-      <aside
-        className="w-72 flex-shrink-0 flex flex-col border-r overflow-y-auto"
-        style={{ background: "hsl(var(--sidebar-background))", borderColor: "hsl(var(--border))" }}
-      >
+      <aside className="w-72 flex-shrink-0 flex flex-col border-r overflow-y-auto"
+        style={{ background: "hsl(var(--sidebar-background))", borderColor: "hsl(var(--border))" }}>
         <div className="p-5 space-y-5">
           <section>
             <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 px-1">Выберите дату</div>
@@ -294,7 +391,7 @@ export default function AppointmentsModule() {
             <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 px-1">Статистика</div>
             <div className="space-y-2">
               <div className="rounded-xl p-4" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}>
-                <div className="text-2xl font-black" style={{ color: "hsl(var(--primary))" }}>{appointmentCount}</div>
+                <div className="text-2xl font-black" style={{ color: "hsl(var(--primary))" }}>{items.length}</div>
                 <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mt-1">Записей на сегодня</div>
               </div>
               <div className="rounded-xl p-4" style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}>
@@ -308,14 +405,9 @@ export default function AppointmentsModule() {
             <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 px-1">Сотрудники</div>
             <div className="space-y-1.5">
               {employees.map((emp) => (
-                <div
-                  key={emp.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer"
-                >
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
-                    style={{ background: "hsl(var(--secondary))", color: "hsl(var(--primary))" }}
-                  >
+                <div key={emp.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary/50 transition-colors cursor-pointer">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
+                    style={{ background: "hsl(var(--secondary))", color: "hsl(var(--primary))" }}>
                     {empInitials(emp.name)}
                   </div>
                   <div className="min-w-0">
@@ -329,57 +421,40 @@ export default function AppointmentsModule() {
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header bar */}
-        <div
-          className="flex items-center justify-between px-5 shrink-0 border-b"
-          style={{ height: 56, borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}
-        >
+        <div className="flex items-center justify-between px-5 shrink-0 border-b"
+          style={{ height: 48, borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
           <div className="flex items-center gap-3">
-            <Icon name="Calendar" size={18} className="text-muted-foreground" />
+            <Icon name="Calendar" size={16} className="text-muted-foreground" />
             <span className="text-sm font-bold text-foreground capitalize">{dayStr}</span>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedDate(new Date())}
-              className="px-3 py-1.5 rounded-md text-xs font-bold hover:bg-secondary transition-colors text-muted-foreground"
-            >
+            <button onClick={() => setSelectedDate(new Date())}
+              className="px-3 py-1.5 rounded-md text-xs font-bold hover:bg-secondary transition-colors text-muted-foreground">
               Сегодня
             </button>
-            <button
-              onClick={() => setCreateSlot({ empId: employees[0].id, time: "09:00" })}
+            <button onClick={() => handleCellClick(employees[0].id, 0)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold text-white hover:opacity-90 transition-opacity"
-              style={{ background: "hsl(var(--primary))" }}
-            >
+              style={{ background: "hsl(var(--primary))" }}>
               <Icon name="Plus" size={13} className="text-white" />
               Новая запись
             </button>
           </div>
         </div>
 
-        {/* Schedule grid */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto" ref={gridRef}>
           <div className="inline-block min-w-full">
-            {/* Employee header row */}
             <div className="sticky top-0 z-20 flex border-b" style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
-              <div
-                className="w-16 flex-shrink-0 border-r flex items-center justify-center"
-                style={{ height: 56, borderColor: "hsl(var(--border))", background: "hsl(var(--secondary))" }}
-              >
-                <Icon name="Clock" size={16} className="text-muted-foreground" />
+              <div className="w-14 flex-shrink-0 border-r flex items-center justify-center"
+                style={{ height: 48, borderColor: "hsl(var(--border))", background: "hsl(var(--secondary))" }}>
+                <Icon name="Clock" size={14} className="text-muted-foreground" />
               </div>
               <div className="flex">
                 {employees.map((emp) => (
-                  <div
-                    key={emp.id}
-                    className="w-48 flex-shrink-0 border-r px-3 flex items-center gap-3"
-                    style={{ height: 56, borderColor: "hsl(var(--border))" }}
-                  >
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
-                      style={{ background: "hsl(var(--secondary))", color: "hsl(var(--primary))" }}
-                    >
+                  <div key={emp.id} className="flex-shrink-0 border-r px-3 flex items-center gap-2.5"
+                    style={{ width: COL_W, height: 48, borderColor: "hsl(var(--border))" }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
+                      style={{ background: "hsl(var(--secondary))", color: "hsl(var(--primary))" }}>
                       {empInitials(emp.name)}
                     </div>
                     <div className="min-w-0">
@@ -391,82 +466,96 @@ export default function AppointmentsModule() {
               </div>
             </div>
 
-            {/* Grid body */}
-            <div className="flex">
-              {/* Time column */}
-              <div
-                className="w-16 flex-shrink-0 border-r sticky left-0 z-10"
-                style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--secondary))" }}
-              >
+            <div className="flex relative">
+              <div className="w-14 flex-shrink-0 border-r sticky left-0 z-10"
+                style={{ borderColor: "hsl(var(--border))", background: "hsl(var(--secondary))" }}>
                 {timeSlots.map((time) => (
-                  <div
-                    key={time}
-                    className="h-16 border-b flex items-center justify-center text-[10px] font-bold text-muted-foreground"
-                    style={{ borderColor: "hsl(var(--border))" }}
-                  >
+                  <div key={time} className="border-b flex items-center justify-center text-[10px] font-bold text-muted-foreground"
+                    style={{ height: SLOT_H, borderColor: "hsl(var(--border))" }}>
                     {time}
                   </div>
                 ))}
               </div>
 
-              {/* Slots */}
-              <div className="flex">
+              <div className="flex relative">
                 {employees.map((emp) => (
-                  <div key={emp.id} className="w-48 flex-shrink-0 border-r" style={{ borderColor: "hsl(var(--border))" }}>
-                    {timeSlots.map((time) => {
-                      const item = items.find((it) => it.empId === emp.id && it.time === time);
+                  <div key={emp.id} className="flex-shrink-0 border-r relative"
+                    style={{ width: COL_W, borderColor: "hsl(var(--border))" }}>
+                    {timeSlots.map((_, slotIdx) => (
+                      <div key={slotIdx} className="border-b group cursor-pointer"
+                        style={{ height: SLOT_H, borderColor: "hsl(var(--border))" }}
+                        onClick={() => handleCellClick(emp.id, slotIdx)}>
+                        <div className="w-full h-full p-1">
+                          <div className="w-full h-full opacity-0 group-hover:opacity-100 border border-dashed rounded-lg flex items-center justify-center
+                            text-[9px] font-bold uppercase transition-all hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))]"
+                            style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
+                            +
+                          </div>
+                        </div>
+                      </div>
+                    ))}
 
-                      return (
+                    {locks.filter((l) => l.empId === emp.id).map((lk, i) => (
+                      <div key={`lock-${i}`} className="absolute left-0 right-0 px-1 pointer-events-none"
+                        style={{ top: lk.startSlot * SLOT_H + 2, height: lk.duration * SLOT_H - 4 }}>
+                        <div className="w-full h-full rounded-lg flex flex-col items-center justify-center text-[10px] font-bold uppercase tracking-tight"
+                          style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}>
+                          <Icon name="Lock" size={11} className="mb-1 opacity-50" />
+                          <span>{lk.label}</span>
+                        </div>
+                      </div>
+                    ))}
+
+                    {items.filter((it) => it.empId === emp.id).map((it) => (
+                      <div key={it.id}
+                        className={`absolute left-0 right-0 px-1 transition-opacity ${dragRef.current?.id === it.id && isDragging ? "opacity-30" : ""}`}
+                        style={{ top: it.startSlot * SLOT_H + 2, height: it.duration * SLOT_H - 4, zIndex: 5 }}>
                         <div
-                          key={`${emp.id}-${time}`}
-                          className="h-16 border-b p-1 group"
-                          style={{ borderColor: "hsl(var(--border))" }}
-                        >
-                          {item ? (
-                            item.type === "appointment" ? (
-                              <div
-                                className={`h-full w-full rounded-lg border-l-[3px] p-2.5 text-[11px] leading-tight cursor-pointer
-                                  transition-transform hover:scale-[1.02] ${emp.color}`}
-                              >
-                                <div className="font-black text-xs truncate uppercase tracking-tight">{item.customer}</div>
-                                <div className="opacity-70 font-medium truncate mt-0.5">{item.service}</div>
-                              </div>
-                            ) : (
-                              <div
-                                className="h-full w-full rounded-lg flex flex-col items-center justify-center text-[10px] font-bold uppercase tracking-tight"
-                                style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}
-                              >
-                                <Icon name="Lock" size={11} className="mb-1 opacity-50" />
-                                <span>{item.label}</span>
-                              </div>
-                            )
-                          ) : (
-                            <button
-                              onClick={() => setCreateSlot({ empId: emp.id, time })}
-                              className="w-full h-full opacity-0 group-hover:opacity-100 border border-dashed rounded-lg
-                                text-[9px] font-bold uppercase transition-all hover:border-[hsl(var(--primary))] hover:text-[hsl(var(--primary))]"
-                              style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--muted-foreground))" }}
-                            >
-                              +
-                            </button>
+                          className={`w-full h-full rounded-lg border-l-[3px] p-2.5 text-[11px] leading-tight cursor-grab active:cursor-grabbing
+                            transition-shadow hover:shadow-lg relative ${emp.color}`}
+                          style={{ borderLeftColor: emp.borderColor }}
+                          onMouseDown={(e) => handleDragStart(e, it.id)}
+                          onClick={(e) => handleItemClick(e, it.id)}>
+                          <div className="font-black text-xs truncate uppercase tracking-tight">
+                            {[it.carBrand, it.carModel].filter(Boolean).join(" ") || it.customer}
+                          </div>
+                          <div className="opacity-70 font-medium truncate mt-0.5">{it.service}</div>
+                          {it.duration >= 3 && (
+                            <div className="opacity-50 text-[10px] mt-1">{slotToTime(it.startSlot)} — {slotToTime(it.startSlot + it.duration)}</div>
                           )}
                         </div>
-                      );
-                    })}
+                        <div className="absolute bottom-0 left-1 right-1 h-3 cursor-s-resize rounded-b-lg hover:bg-white/10 transition-colors"
+                          onMouseDown={(e) => handleResizeStart(e, it.id)} />
+                      </div>
+                    ))}
                   </div>
                 ))}
+
+                {dragGhost && isDragging && (
+                  <div className="absolute pointer-events-none z-30 px-1"
+                    style={{
+                      left: employees.findIndex((e) => e.id === dragGhost.empId) * COL_W,
+                      top: dragGhost.slot * SLOT_H + 2,
+                      width: COL_W,
+                      height: dragGhost.duration * SLOT_H - 4,
+                    }}>
+                    <div className="w-full h-full rounded-lg border-2 border-dashed"
+                      style={{ borderColor: "hsl(var(--primary))", background: "hsl(var(--primary) / 0.1)" }} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {createSlot && (
-        <CreateModal
-          empId={createSlot.empId}
-          time={createSlot.time}
-          onClose={() => setCreateSlot(null)}
-          onCreated={handleCreated}
+      {modalState && (
+        <AppointmentModal
+          item={modalState.item}
+          emp={modalState.emp}
+          onClose={() => setModalState(null)}
+          onSave={handleSave}
+          onDelete={modalState.item.customer ? handleDelete : undefined}
         />
       )}
     </div>

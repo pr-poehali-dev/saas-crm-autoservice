@@ -292,54 +292,56 @@ export default function App() {
       {/* Main */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Topbar */}
-        <header
-          className="flex items-center gap-4 px-6 py-3 border-b shrink-0"
-          style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
-        >
-          <button
-            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+        {activeModule !== "appointments" && (
+          <header
+            className="flex items-center gap-4 px-6 py-3 border-b shrink-0"
+            style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
           >
-            <Icon
-              name={sidebarOpen ? "PanelLeftClose" : "PanelLeft"}
-              size={16}
-              className="text-muted-foreground"
-            />
-          </button>
+            <button
+              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Icon
+                name={sidebarOpen ? "PanelLeftClose" : "PanelLeft"}
+                size={16}
+                className="text-muted-foreground"
+              />
+            </button>
 
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">AutoCRM</span>
-            <Icon name="ChevronRight" size={14} className="text-muted-foreground" />
-            <span className="font-medium text-foreground">{activeItem.label}</span>
-          </div>
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">AutoCRM</span>
+              <Icon name="ChevronRight" size={14} className="text-muted-foreground" />
+              <span className="font-medium text-foreground">{activeItem.label}</span>
+            </div>
 
-          <div className="flex-1" />
+            <div className="flex-1" />
 
-          <div
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-muted-foreground border cursor-text"
-            style={{ background: "hsl(var(--secondary))", borderColor: "hsl(var(--border))", minWidth: 200 }}
-          >
-            <Icon name="Search" size={14} />
-            <span>Поиск...</span>
-            <span className="ml-auto font-mono text-xs opacity-40">⌘K</span>
-          </div>
+            <div
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-muted-foreground border cursor-text"
+              style={{ background: "hsl(var(--secondary))", borderColor: "hsl(var(--border))", minWidth: 200 }}
+            >
+              <Icon name="Search" size={14} />
+              <span>Поиск...</span>
+              <span className="ml-auto font-mono text-xs opacity-40">⌘K</span>
+            </div>
 
-          <button className="relative w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors">
-            <Icon name="Bell" size={16} className="text-muted-foreground" />
-            <span
-              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full border-2"
-              style={{ background: "hsl(var(--primary))", borderColor: "hsl(var(--card))" }}
-            />
-          </button>
+            <button className="relative w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors">
+              <Icon name="Bell" size={16} className="text-muted-foreground" />
+              <span
+                className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full border-2"
+                style={{ background: "hsl(var(--primary))", borderColor: "hsl(var(--card))" }}
+              />
+            </button>
 
-          <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors">
-            <Icon name="HelpCircle" size={16} className="text-muted-foreground" />
-          </button>
-        </header>
+            <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors">
+              <Icon name="HelpCircle" size={16} className="text-muted-foreground" />
+            </button>
+          </header>
+        )}
 
         {/* Page */}
         {activeModule === "appointments" ? (
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-hidden flex flex-col">
             <AppointmentsModule />
           </main>
         ) : (
