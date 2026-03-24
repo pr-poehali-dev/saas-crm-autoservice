@@ -338,33 +338,38 @@ export default function App() {
         </header>
 
         {/* Page */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">{activeItem.label}</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {activeModule === "dashboard"
-                  ? "24 марта 2026 · Понедельник"
-                  : `Управление разделом «${activeItem.label}»`}
-              </p>
+        {activeModule === "appointments" ? (
+          <main className="flex-1 overflow-hidden">
+            <AppointmentsModule />
+          </main>
+        ) : (
+          <main className="flex-1 overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-lg font-semibold text-foreground">{activeItem.label}</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {activeModule === "dashboard"
+                    ? "24 марта 2026 · Понедельник"
+                    : `Управление разделом «${activeItem.label}»`}
+                </p>
+              </div>
+              {activeModule !== "dashboard" && (
+                <button
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white hover:opacity-90 transition-opacity"
+                  style={{ background: "hsl(var(--primary))" }}
+                >
+                  <Icon name="Plus" size={15} className="text-white" />
+                  Создать
+                </button>
+              )}
             </div>
-            {activeModule !== "dashboard" && activeModule !== "appointments" && (
-              <button
-                className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white hover:opacity-90 transition-opacity"
-                style={{ background: "hsl(var(--primary))" }}
-              >
-                <Icon name="Plus" size={15} className="text-white" />
-                Создать
-              </button>
-            )}
-          </div>
 
-          {activeModule === "dashboard" && <Dashboard />}
-          {activeModule === "appointments" && <AppointmentsModule />}
-          {activeModule !== "dashboard" && activeModule !== "appointments" && (
-            <ModulePlaceholder item={activeItem} />
-          )}
-        </main>
+            {activeModule === "dashboard" && <Dashboard />}
+            {activeModule !== "dashboard" && (
+              <ModulePlaceholder item={activeItem} />
+            )}
+          </main>
+        )}
       </div>
     </div>
   );
