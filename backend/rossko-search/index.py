@@ -12,11 +12,52 @@ CORS_HEADERS = {
     "Content-Type": "application/json",
 }
 
-ROSSKO_URL = "http://api.rossko.ru/service/v2.1/GetSearch"
+ROSSKO_SEARCH_URL = "http://api.rossko.ru/service/v2.1/GetSearch"
+ROSSKO_CHECKOUT_URL = "http://api.rossko.ru/service/v2.1/GetCheckoutDetails"
 
 
 def resp(status, body):
     return {"statusCode": status, "headers": CORS_HEADERS, "body": json.dumps(body, ensure_ascii=False)}
+
+
+def get_delivery_address(key1, key2):
+    soap = f"""<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="http://api.rossko.ru/">
+  <soap:Body>
+    <ns:GetCheckoutDetails>
+      <ns:KEY1>{key1}</ns:KEY1>
+      <ns:KEY2>{key2}</ns:KEY2>
+    </ns:GetCheckoutDetails>
+  </soap:Body>
+</soap:Envelope>"""
+
+    req = urllib.request.Request(
+        ROSSKO_CHECKOUT_URL,
+        data=soap.encode("utf-8"),
+        headers={"Content-Type": "text/xml; charset=utf-8", "SOAPAction": ""},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            xml_text = response.read().decode("utf-8")
+    except Exception as e:
+        return "", "", f"error: {str(e)}"
+
+    delivery_id = ""
+    address_id = ""
+
+    root = ET.fromstring(xml_text)
+    for el in root.iter("{http://api.rossko.ru/}delivery"):
+        did = el.findtext("{http://api.rossko.ru/}id", "")
+        if did:
+            delivery_id = did
+            for addr in el.iter("{http://api.rossko.ru/}address"):
+                aid = addr.findtext("{http://api.rossko.ru/}id", "")
+                if aid:
+                    address_id = aid
+                    break
+            break
+
+    return delivery_id, address_id, xml_text
 
 
 def build_soap_request(key1, key2, text, delivery_id="000000002", address_id=""):
@@ -95,16 +136,20 @@ def handler(event, context):
         body_data = {}
 
     text = params.get("text") or body_data.get("text", "")
-    delivery_id = params.get("delivery_id") or body_data.get("delivery_id", "000000002")
+    delivery_id = params.get("delivery_id") or body_data.get("delivery_id", "")
     address_id = params.get("address_id") or body_data.get("address_id", "")
 
     if not text.strip():
         return resp(400, {"error": "Укажите артикул (параметр text)"})
 
+    checkout_debug = ""
+    if not delivery_id or not address_id:
+        delivery_id, address_id, checkout_debug = get_delivery_address(key1, key2)
+
     soap_xml = build_soap_request(key1, key2, text.strip(), delivery_id, address_id)
 
     req = urllib.request.Request(
-        ROSSKO_URL,
+        ROSSKO_SEARCH_URL,
         data=soap_xml.encode("utf-8"),
         headers={"Content-Type": "text/xml; charset=utf-8", "SOAPAction": ""},
     )
@@ -116,4 +161,8 @@ def handler(event, context):
         return resp(502, {"error": f"Ошибка соединения с Rossko: {str(e)}"})
 
     result = parse_response(response_xml)
+    result["debug_response"] = response_xml[:2000]
+    result["debug_checkout"] = checkout_debug[:2000] if checkout_debug else ""
+    result["debug_delivery_id"] = delivery_id
+    result["debug_address_id"] = address_id
     return resp(200, result)
