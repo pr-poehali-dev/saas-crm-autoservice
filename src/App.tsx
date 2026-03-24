@@ -14,7 +14,6 @@ interface NavItem {
   id: ModuleId;
   label: string;
   icon: string;
-  badge?: number;
   group: string;
 }
 
@@ -39,6 +38,13 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const GROUPS = ["Главное", "Справочники", "Склад и деньги", "Организация", "Система"];
+
+const MODULE_BADGES: Partial<Record<ModuleId, number>> = {
+  appointments: 18,
+  deals: 47,
+  counterparties: 1203,
+  warehouses: 3,
+};
 
 // ─── Dashboard stats ──────────────────────────────────────────────────────────
 const STATS = [
@@ -255,15 +261,15 @@ export default function App() {
                       {sidebarOpen && (
                         <span className="flex-1 truncate text-sm">{item.label}</span>
                       )}
-                      {sidebarOpen && item.badge !== undefined && (
+                      {sidebarOpen && MODULE_BADGES[item.id] !== undefined && (
                         <span
-                          className="text-xs font-mono px-1.5 py-0.5 rounded font-semibold"
-                          style={{ background: "hsl(210 100% 56% / 0.15)", color: "hsl(var(--primary))" }}
+                          className="text-[10px] font-mono px-1.5 py-0.5 rounded font-semibold"
+                          style={{ background: "hsl(210 100% 56% / 0.12)", color: "hsl(var(--primary))" }}
                         >
-                          {item.badge}
+                          {MODULE_BADGES[item.id]}
                         </span>
                       )}
-                      {!sidebarOpen && item.badge !== undefined && (
+                      {!sidebarOpen && MODULE_BADGES[item.id] !== undefined && (
                         <span
                           className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full"
                           style={{ background: "hsl(var(--primary))" }}
@@ -344,10 +350,15 @@ export default function App() {
         {/* Page */}
         {activeModule === "appointments" ? (
           <main className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: "hsl(var(--border))" }}>
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">{activeItem.label}</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">Управление разделом «{activeItem.label}»</p>
+            <div className="flex items-center px-6 py-3 border-b shrink-0" style={{ borderColor: "hsl(var(--border))" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "hsl(var(--primary) / 0.1)" }}>
+                  <Icon name={activeItem.icon} size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-base font-semibold text-foreground">{activeItem.label}</h1>
+                  <p className="text-xs text-muted-foreground">Управление разделом «{activeItem.label}»</p>
+                </div>
               </div>
             </div>
             <div className="flex-1 overflow-hidden">
@@ -357,13 +368,18 @@ export default function App() {
         ) : (
           <main className="flex-1 overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-lg font-semibold text-foreground">{activeItem.label}</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {activeModule === "dashboard"
-                    ? "24 марта 2026 · Понедельник"
-                    : `Управление разделом «${activeItem.label}»`}
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: "hsl(var(--primary) / 0.1)" }}>
+                  <Icon name={activeItem.icon} size={20} className="text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-foreground">{activeItem.label}</h1>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {activeModule === "dashboard"
+                      ? "24 марта 2026 · Понедельник"
+                      : `Управление разделом «${activeItem.label}»`}
+                  </p>
+                </div>
               </div>
               {activeModule !== "dashboard" && (
                 <button
