@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Icon from "@/components/ui/icon";
+import AppointmentsModule from "@/pages/AppointmentsModule";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ModuleId =
@@ -354,7 +355,7 @@ export default function App() {
                   : `Управление разделом «${activeItem.label}»`}
               </p>
             </div>
-            {activeModule !== "dashboard" && (
+            {activeModule !== "dashboard" && activeModule !== "appointments" && (
               <button
                 className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white hover:opacity-90 transition-opacity"
                 style={{ background: "hsl(var(--primary))" }}
@@ -365,7 +366,11 @@ export default function App() {
             )}
           </div>
 
-          {activeModule === "dashboard" ? <Dashboard /> : <ModulePlaceholder item={activeItem} />}
+          {activeModule === "dashboard" && <Dashboard />}
+          {activeModule === "appointments" && <AppointmentsModule />}
+          {activeModule !== "dashboard" && activeModule !== "appointments" && (
+            <ModulePlaceholder item={activeItem} />
+          )}
         </main>
       </div>
     </div>
