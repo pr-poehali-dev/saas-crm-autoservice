@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import Icon from "@/components/ui/icon";
 import AppointmentsModule from "@/pages/AppointmentsModule";
 import WarehousesModule from "@/pages/WarehousesModule";
+import PriceModule from "@/pages/PriceModule";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ModuleId =
   | "dashboard" | "counterparties" | "appointments" | "services"
   | "products" | "deals" | "finance" | "nomenclature" | "warehouses"
   | "companies" | "cashdesks" | "contracts" | "requisites"
-  | "roles" | "reports" | "settings";
+  | "roles" | "reports" | "settings" | "price";
 
 interface NavItem {
   id: ModuleId;
@@ -26,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "services",       label: "Услуги",           icon: "Wrench",         group: "Справочники" },
   { id: "products",       label: "Товары",           icon: "Package",        group: "Справочники" },
   { id: "nomenclature",   label: "Номенклатура",     icon: "Layers",         group: "Справочники" },
+  { id: "price",          label: "Прайс",            icon: "SearchCheck",    group: "Справочники" },
   { id: "warehouses",     label: "Склады",           icon: "Warehouse",      group: "Склад и деньги" },
   { id: "finance",        label: "Деньги",           icon: "Banknote",       group: "Склад и деньги" },
   { id: "cashdesks",      label: "Кассы",            icon: "Receipt",        group: "Склад и деньги" },
@@ -394,7 +396,8 @@ export default function App() {
 
             {activeModule === "dashboard" && <Dashboard />}
             {activeModule === "warehouses" && <WarehousesModule />}
-            {activeModule !== "dashboard" && activeModule !== "warehouses" && (
+            {activeModule === "price" && <PriceModule />}
+            {activeModule !== "dashboard" && activeModule !== "warehouses" && activeModule !== "price" && (
               <ModulePlaceholder item={activeItem} />
             )}
           </main>
