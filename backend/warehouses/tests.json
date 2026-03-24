@@ -1,0 +1,27 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "GET без tenant_id — ошибка 400",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 400,
+      "expectedBody": { "error": "Заголовок X-Tenant-Id обязателен" },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "GET список с несуществующим tenant_id",
+      "method": "GET",
+      "path": "/",
+      "headers": { "X-Tenant-Id": "00000000-0000-0000-0000-000000000000" },
+      "expectedStatus": 200,
+      "expectedBody": { "items": [] },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

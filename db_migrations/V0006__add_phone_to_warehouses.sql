@@ -1,0 +1,1 @@
+ALTER TABLE t_p47435488_saas_crm_autoservice.warehouses ADD COLUMN phone TEXT;

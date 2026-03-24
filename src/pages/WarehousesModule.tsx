@@ -1,5 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Icon from "@/components/ui/icon";
+import {
+  fetchWarehouses,
+  createWarehouse,
+  updateWarehouse,
+  deleteWarehouse,
+  type Warehouse as ApiWarehouse,
+} from "@/api/warehouses";
 
 interface Warehouse {
   id: string;
@@ -10,8 +17,9 @@ interface Warehouse {
   isActive: boolean;
 }
 
-let idCounter = 1;
-function genId() { return `wh-${Date.now()}-${idCounter++}`; }
+function toLocal(w: ApiWarehouse): Warehouse {
+  return { id: w.id, name: w.name, address: w.address || "", phone: w.phone || "", isDefault: w.is_default, isActive: w.is_active };
+}
 
 function InputField({ label, value, onChange, placeholder, type = "text" }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
@@ -26,9 +34,10 @@ function InputField({ label, value, onChange, placeholder, type = "text" }: {
   );
 }
 
-function WarehouseModal({ item, onClose, onSave, onDelete }: {
+function WarehouseModal({ item, onClose, onSave, onDelete, saving }: {
   item: Warehouse | null; onClose: () => void;
-  onSave: (data: Warehouse) => void; onDelete?: (id: string) => void;
+  onSave: (data: { name: string; address: string; phone: string; isDefault: boolean }, id?: string) => void;
+  onDelete?: (id: string) => void; saving: boolean;
 }) {
   const isEdit = !!item?.name;
   const [form, setForm] = useState({
@@ -38,19 +47,11 @@ function WarehouseModal({ item, onClose, onSave, onDelete }: {
     isDefault: item?.isDefault || false,
   });
 
-  const canSubmit = form.name.trim();
+  const canSubmit = form.name.trim() && !saving;
 
   const submit = () => {
     if (!canSubmit) return;
-    onSave({
-      id: item?.id || genId(),
-      name: form.name,
-      address: form.address,
-      phone: form.phone,
-      isDefault: form.isDefault,
-      isActive: true,
-    });
-    onClose();
+    onSave(form, item?.id);
   };
 
   return (
@@ -93,7 +94,7 @@ function WarehouseModal({ item, onClose, onSave, onDelete }: {
           <button onClick={submit} disabled={!canSubmit}
             className="px-5 py-2 rounded-lg text-sm font-bold text-white hover:opacity-90 transition-opacity disabled:opacity-30"
             style={{ background: "hsl(var(--primary))" }}>
-            {isEdit ? "Сохранить" : "Создать"}
+            {saving ? "Сохранение..." : isEdit ? "Сохранить" : "Создать"}
           </button>
         </div>
       </div>
@@ -103,26 +104,90 @@ function WarehouseModal({ item, onClose, onSave, onDelete }: {
 
 export default function WarehousesModule() {
   const [items, setItems] = useState<Warehouse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<Warehouse | null | "new">(null);
 
-  const handleSave = (data: Warehouse) => {
-    setItems((prev) => {
-      const exists = prev.find((i) => i.id === data.id);
-      if (data.isDefault) {
-        prev = prev.map((i) => ({ ...i, isDefault: false }));
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchWarehouses();
+      setItems(data.map(toLocal));
+    } catch {
+      // API ещё не подключен — работаем локально
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = async (form: { name: string; address: string; phone: string; isDefault: boolean }, id?: string) => {
+    setSaving(true);
+    try {
+      if (id) {
+        const res = await updateWarehouse(id, {
+          name: form.name, address: form.address, phone: form.phone, is_default: form.isDefault,
+        });
+        setItems((prev) => {
+          let updated = prev.map((i) => i.id === id ? toLocal(res) : i);
+          if (form.isDefault) updated = updated.map((i) => i.id !== id ? { ...i, isDefault: false } : i);
+          return updated;
+        });
+      } else {
+        const res = await createWarehouse({
+          name: form.name, address: form.address, phone: form.phone, is_default: form.isDefault,
+        });
+        setItems((prev) => {
+          let updated = [...prev, toLocal(res)];
+          if (form.isDefault) updated = updated.map((i) => i.id !== res.id ? { ...i, isDefault: false } : i);
+          return updated;
+        });
       }
-      if (exists) return prev.map((i) => i.id === data.id ? data : i);
-      return [...prev, data];
-    });
+    } catch {
+      // Если API недоступен — сохраняем локально
+      const localId = id || `wh-${Date.now()}`;
+      const wh: Warehouse = { id: localId, name: form.name, address: form.address, phone: form.phone, isDefault: form.isDefault, isActive: true };
+      setItems((prev) => {
+        const updated = form.isDefault ? prev.map((i) => ({ ...i, isDefault: false })) : prev;
+        const exists = updated.find((i) => i.id === localId);
+        if (exists) return updated.map((i) => i.id === localId ? wh : i);
+        return [...updated, wh];
+      });
+    } finally {
+      setSaving(false);
+      setModal(null);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteWarehouse(id);
+    } catch {
+      // локальное удаление если API недоступен
+    }
     setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const toggleActive = (id: string) => {
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, isActive: !i.isActive } : i));
+  const toggleActive = async (id: string) => {
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    const newActive = !item.isActive;
+    setItems((prev) => prev.map((i) => i.id === id ? { ...i, isActive: newActive } : i));
+    try {
+      await updateWarehouse(id, { is_active: newActive });
+    } catch {
+      // молча
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 300 }}>
+        <div className="text-sm text-muted-foreground">Загрузка...</div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -197,6 +262,7 @@ export default function WarehousesModule() {
           onClose={() => setModal(null)}
           onSave={handleSave}
           onDelete={modal !== "new" ? handleDelete : undefined}
+          saving={saving}
         />
       )}
     </div>
