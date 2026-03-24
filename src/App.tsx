@@ -292,8 +292,7 @@ export default function App() {
       {/* Main */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Topbar */}
-        {activeModule !== "appointments" && (
-          <header
+        <header
             className="flex items-center gap-4 px-6 py-3 border-b shrink-0"
             style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
           >
@@ -336,8 +335,7 @@ export default function App() {
             <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors">
               <Icon name="HelpCircle" size={16} className="text-muted-foreground" />
             </button>
-          </header>
-        )}
+        </header>
 
         {/* Page */}
         {activeModule === "appointments" ? (
