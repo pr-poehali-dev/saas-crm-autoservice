@@ -219,13 +219,13 @@ export default function App() {
       >
         {/* Logo */}
         <div
-          className="flex items-center justify-center px-3 py-4 border-b shrink-0"
+          className="flex items-center px-3 py-3 border-b shrink-0"
           style={{ borderColor: "hsl(var(--sidebar-border))" }}
         >
           <img
             src="https://cdn.poehali.dev/projects/bb9a0de0-c4f3-43a3-86ce-c6d3cbe383e8/bucket/f5ecea76-05c7-4ea3-8a23-e7fd1b8ad69a.png"
             alt="VINADMIN"
-            className={sidebarOpen ? "h-6" : "h-5"}
+            className={sidebarOpen ? "h-5" : "h-4"}
           />
         </div>
 
@@ -341,20 +341,18 @@ export default function App() {
             </button>
         </header>
 
-        {/* Breadcrumbs */}
-        {activeModule !== "appointments" && (
-          <div className="flex items-center gap-2 px-6 py-2 text-xs border-b shrink-0"
-            style={{ borderColor: "hsl(var(--border))" }}>
-            <span className="text-muted-foreground">VINADMIN</span>
-            <Icon name="ChevronRight" size={12} className="text-muted-foreground" />
-            <span className="font-medium text-foreground">{activeItem.label}</span>
-          </div>
-        )}
-
         {/* Page */}
         {activeModule === "appointments" ? (
           <main className="flex-1 overflow-hidden flex flex-col">
-            <AppointmentsModule />
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: "hsl(var(--border))" }}>
+              <div>
+                <h1 className="text-lg font-semibold text-foreground">{activeItem.label}</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">Управление разделом «{activeItem.label}»</p>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <AppointmentsModule />
+            </div>
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto p-6">
