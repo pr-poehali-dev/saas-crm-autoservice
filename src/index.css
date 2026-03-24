@@ -47,6 +47,49 @@
     --warning: 38 92% 50%;
     --info: 199 89% 48%;
   }
+
+  [data-theme="dark"] {
+    --background: 220 16% 8%;
+    --foreground: 220 10% 90%;
+
+    --card: 220 14% 11%;
+    --card-foreground: 220 10% 90%;
+
+    --popover: 220 14% 11%;
+    --popover-foreground: 220 10% 90%;
+
+    --primary: 210 100% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 220 10% 80%;
+
+    --muted: 220 14% 14%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 210 100% 56%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 14% 16%;
+    --input: 220 14% 16%;
+    --ring: 210 100% 56%;
+
+    --sidebar-background: 220 18% 6%;
+    --sidebar-foreground: 220 10% 70%;
+    --sidebar-primary: 210 100% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 12%;
+    --sidebar-accent-foreground: 220 10% 90%;
+    --sidebar-border: 220 14% 12%;
+    --sidebar-ring: 210 100% 56%;
+
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 199 89% 48%;
+  }
 }
 
 @layer base {

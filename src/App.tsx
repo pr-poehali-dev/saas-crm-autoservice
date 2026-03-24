@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Icon from "@/components/ui/icon";
 import AppointmentsModule from "@/pages/AppointmentsModule";
 import WarehousesModule from "@/pages/WarehousesModule";
@@ -196,7 +196,13 @@ function Dashboard() {
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleId>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
   const tenant = "АвтоМастер Плюс";
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   const activeItem = NAV_ITEMS.find((n) => n.id === activeModule)!;
 
@@ -294,7 +300,7 @@ export default function App() {
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Topbar */}
         <header
-            className="flex items-center gap-4 px-6 py-3 border-b shrink-0"
+            className="flex items-center gap-4 px-6 py-2.5 border-b shrink-0"
             style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
           >
             <button
@@ -307,12 +313,6 @@ export default function App() {
                 className="text-muted-foreground"
               />
             </button>
-
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">AutoCRM</span>
-              <Icon name="ChevronRight" size={14} className="text-muted-foreground" />
-              <span className="font-medium text-foreground">{activeItem.label}</span>
-            </div>
 
             <div className="flex-1" />
 
@@ -333,10 +333,23 @@ export default function App() {
               />
             </button>
 
-            <button className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors">
-              <Icon name="HelpCircle" size={16} className="text-muted-foreground" />
+            <button
+              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-secondary transition-colors"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
+              <Icon name={theme === "dark" ? "Sun" : "Moon"} size={16} className="text-muted-foreground" />
             </button>
         </header>
+
+        {/* Breadcrumbs */}
+        {activeModule !== "appointments" && (
+          <div className="flex items-center gap-2 px-6 py-2 text-xs border-b shrink-0"
+            style={{ borderColor: "hsl(var(--border))" }}>
+            <span className="text-muted-foreground">VINADMIN</span>
+            <Icon name="ChevronRight" size={12} className="text-muted-foreground" />
+            <span className="font-medium text-foreground">{activeItem.label}</span>
+          </div>
+        )}
 
         {/* Page */}
         {activeModule === "appointments" ? (

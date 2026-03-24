@@ -21,14 +21,7 @@ interface AppointmentItem {
   carPlate: string;
   service: string;
   note: string;
-  parts: PartLine[];
-}
-
-interface PartLine {
-  name: string;
-  sku: string;
-  qty: number;
-  price: number;
+  warehouseId: string;
 }
 
 const SLOT_H = 40;
@@ -44,15 +37,10 @@ const employees: Employee[] = [
   { id: 7, name: "Владимир Т.", role: "Шиномонтаж", color: "bg-indigo-500/15 text-indigo-400", borderColor: "rgb(99,102,241)" },
 ];
 
-const stockItems = [
-  { name: "Масло моторное 5W-40", sku: "OIL-5W40", qty: 24, price: 3200 },
-  { name: "Фильтр масляный", sku: "FLT-OIL-01", qty: 18, price: 450 },
-  { name: "Фильтр воздушный", sku: "FLT-AIR-01", qty: 12, price: 620 },
-  { name: "Колодки тормозные перед.", sku: "BRK-PAD-F", qty: 8, price: 2800 },
-  { name: "Колодки тормозные задн.", sku: "BRK-PAD-R", qty: 6, price: 2200 },
-  { name: "Свечи зажигания (4шт)", sku: "SPK-4SET", qty: 15, price: 1600 },
-  { name: "Антифриз G12+ 5л", sku: "CLN-G12-5", qty: 10, price: 1100 },
-  { name: "Ремень ГРМ", sku: "BLT-GRM", qty: 4, price: 4500 },
+const warehousesList = [
+  { id: "wh-1", name: "Основной склад" },
+  { id: "wh-2", name: "Склад запчастей" },
+  { id: "wh-3", name: "Выездной склад" },
 ];
 
 function generateTimeSlots() {
@@ -154,39 +142,11 @@ function AppointmentModal({ item, emp, onClose, onSave, onDelete }: {
     service: item.service,
     note: item.note,
     duration: item.duration,
-    parts: item.parts || [] as PartLine[],
+    warehouseId: item.warehouseId || "",
   });
-  const [partSearch, setPartSearch] = useState("");
-  const [showPartPicker, setShowPartPicker] = useState(false);
 
   const set = (k: string, v: string | number) => setForm((f) => ({ ...f, [k]: v }));
   const canSubmit = form.customer.trim() && form.service.trim();
-
-  const filteredStock = stockItems.filter((s) =>
-    s.name.toLowerCase().includes(partSearch.toLowerCase()) || s.sku.toLowerCase().includes(partSearch.toLowerCase())
-  );
-
-  const addPart = (stock: typeof stockItems[0]) => {
-    const existing = form.parts.find((p) => p.sku === stock.sku);
-    if (existing) {
-      setForm((f) => ({ ...f, parts: f.parts.map((p) => p.sku === stock.sku ? { ...p, qty: p.qty + 1 } : p) }));
-    } else {
-      setForm((f) => ({ ...f, parts: [...f.parts, { name: stock.name, sku: stock.sku, qty: 1, price: stock.price }] }));
-    }
-    setShowPartPicker(false);
-    setPartSearch("");
-  };
-
-  const removePart = (sku: string) => {
-    setForm((f) => ({ ...f, parts: f.parts.filter((p) => p.sku !== sku) }));
-  };
-
-  const updatePartQty = (sku: string, qty: number) => {
-    if (qty < 1) return removePart(sku);
-    setForm((f) => ({ ...f, parts: f.parts.map((p) => p.sku === sku ? { ...p, qty } : p) }));
-  };
-
-  const partsTotal = form.parts.reduce((sum, p) => sum + p.qty * p.price, 0);
 
   const submit = () => {
     if (!canSubmit) return;
@@ -243,67 +203,16 @@ function AppointmentModal({ item, emp, onClose, onSave, onDelete }: {
             </div>
           </div>
 
-          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest pt-1 flex items-center justify-between">
-            <span>Запчасти со склада</span>
-            {partsTotal > 0 && <span style={{ color: "hsl(var(--primary))" }}>{partsTotal.toLocaleString("ru-RU")} ₽</span>}
-          </div>
-
-          {form.parts.length > 0 && (
-            <div className="space-y-1.5">
-              {form.parts.map((p) => (
-                <div key={p.sku} className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
-                  style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-foreground truncate">{p.name}</div>
-                    <div className="text-muted-foreground text-[10px]">{p.sku} · {p.price.toLocaleString("ru-RU")} ₽/шт</div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => updatePartQty(p.sku, p.qty - 1)}
-                      className="w-5 h-5 rounded flex items-center justify-center hover:bg-secondary text-muted-foreground">
-                      <Icon name="Minus" size={10} />
-                    </button>
-                    <span className="text-xs font-bold text-foreground w-5 text-center">{p.qty}</span>
-                    <button onClick={() => updatePartQty(p.sku, p.qty + 1)}
-                      className="w-5 h-5 rounded flex items-center justify-center hover:bg-secondary text-muted-foreground">
-                      <Icon name="Plus" size={10} />
-                    </button>
-                  </div>
-                  <button onClick={() => removePart(p.sku)} className="text-red-400 hover:text-red-300 shrink-0">
-                    <Icon name="X" size={12} />
-                  </button>
-                </div>
+          <div>
+            <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wide mb-1.5">Склад</label>
+            <select value={form.warehouseId} onChange={(e) => set("warehouseId", e.target.value)}
+              className="w-full px-3 py-2 rounded-lg text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]"
+              style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}>
+              <option value="">Не выбран</option>
+              {warehousesList.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
               ))}
-            </div>
-          )}
-
-          <div className="relative">
-            <button onClick={() => setShowPartPicker(!showPartPicker)}
-              className="flex items-center gap-1.5 text-xs font-bold transition-colors hover:opacity-80"
-              style={{ color: "hsl(var(--primary))" }}>
-              <Icon name="Plus" size={12} />
-              Добавить запчасть
-            </button>
-
-            {showPartPicker && (
-              <div className="absolute left-0 right-0 top-7 z-10 rounded-lg border shadow-xl p-2 max-h-48 overflow-y-auto"
-                style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
-                <input value={partSearch} onChange={(e) => setPartSearch(e.target.value)} placeholder="Поиск по названию или артикулу..."
-                  autoFocus
-                  className="w-full px-2.5 py-1.5 rounded-md text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none mb-1.5"
-                  style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }} />
-                {filteredStock.map((s) => (
-                  <button key={s.sku} onClick={() => addPart(s)}
-                    className="w-full text-left px-2.5 py-2 rounded-md text-xs hover:bg-secondary transition-colors flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-foreground">{s.name}</div>
-                      <div className="text-muted-foreground text-[10px]">{s.sku} · в наличии: {s.qty}</div>
-                    </div>
-                    <span className="text-muted-foreground shrink-0">{s.price.toLocaleString("ru-RU")} ₽</span>
-                  </button>
-                ))}
-                {filteredStock.length === 0 && <div className="text-xs text-muted-foreground px-2 py-2">Ничего не найдено</div>}
-              </div>
-            )}
+            </select>
           </div>
 
           <div>
@@ -349,8 +258,6 @@ export default function AppointmentsModule() {
   const [isResizing, setIsResizing] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
   const clickBlockRef = useRef(false);
-
-  const dayStr = selectedDate.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   const getSlotFromY = useCallback((y: number): number => {
     if (!gridRef.current) return 0;
@@ -447,7 +354,7 @@ export default function AppointmentsModule() {
     const dur = isSlotOccupied(empId, slot, 2) ? 1 : 2;
     const newItem: AppointmentItem = {
       id: genId(), empId, startSlot: slot, duration: dur,
-      customer: "", phone: "", carBrand: "", carModel: "", carPlate: "", service: "", note: "", parts: [],
+      customer: "", phone: "", carBrand: "", carModel: "", carPlate: "", service: "", note: "", warehouseId: "",
     };
     setModalState({ item: newItem, emp });
   };
@@ -479,31 +386,6 @@ export default function AppointmentsModule() {
         style={{ background: "hsl(var(--sidebar-background))", borderColor: "hsl(var(--border))" }}>
         <div className="p-4 space-y-4">
           <section>
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 px-1 flex items-center gap-1.5">
-              <Icon name="Warehouse" size={11} className="text-muted-foreground" />
-              Склад
-            </div>
-            <div className="space-y-1">
-              {stockItems.slice(0, 5).map((s) => (
-                <div key={s.sku} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px]"
-                  style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold text-foreground truncate">{s.name}</div>
-                    <div className="text-muted-foreground text-[9px]">{s.sku}</div>
-                  </div>
-                  <span className={`text-[10px] font-black shrink-0 ml-2 ${s.qty <= 5 ? "text-red-400" : s.qty <= 10 ? "text-yellow-400" : "text-green-400"}`}>
-                    {s.qty} шт
-                  </span>
-                </div>
-              ))}
-              <button className="w-full text-[10px] font-bold py-1.5 rounded-lg hover:bg-secondary transition-colors"
-                style={{ color: "hsl(var(--primary))" }}>
-                Весь склад →
-              </button>
-            </div>
-          </section>
-
-          <section>
             <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 px-1">Дата</div>
             <MiniCalendar selectedDate={selectedDate} onSelect={setSelectedDate} />
           </section>
@@ -520,26 +402,6 @@ export default function AppointmentsModule() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="flex items-center justify-between px-4 shrink-0 border-b"
-          style={{ height: 42, borderColor: "hsl(var(--border))", background: "hsl(var(--card))" }}>
-          <div className="flex items-center gap-2">
-            <Icon name="Calendar" size={14} className="text-muted-foreground" />
-            <span className="text-xs font-bold text-foreground capitalize">{dayStr}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setSelectedDate(new Date())}
-              className="px-2.5 py-1 rounded-md text-[11px] font-bold hover:bg-secondary transition-colors text-muted-foreground">
-              Сегодня
-            </button>
-            <button onClick={() => handleCellClick(employees[0].id, 0)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold text-white hover:opacity-90 transition-opacity"
-              style={{ background: "hsl(var(--primary))" }}>
-              <Icon name="Plus" size={11} className="text-white" />
-              Запись
-            </button>
-          </div>
-        </div>
-
         <div className="flex-1 overflow-auto" ref={gridRef}>
           <div className="inline-block min-w-full">
             <div className="sticky top-0 z-20 flex border-b" style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
@@ -607,10 +469,10 @@ export default function AppointmentsModule() {
                             {[it.carBrand, it.carModel].filter(Boolean).join(" ") || it.customer}
                           </div>
                           <div className="opacity-70 font-medium truncate" style={{ fontSize: 9 }}>{it.service}</div>
-                          {it.parts.length > 0 && (
+                          {it.warehouseId && (
                             <div className="flex items-center gap-0.5 opacity-50 mt-0.5" style={{ fontSize: 8 }}>
-                              <Icon name="Package" size={8} />
-                              <span>{it.parts.length}</span>
+                              <Icon name="Warehouse" size={8} />
+                              <span>{warehousesList.find((w) => w.id === it.warehouseId)?.name || ""}</span>
                             </div>
                           )}
                         </div>
