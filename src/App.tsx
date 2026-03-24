@@ -218,7 +218,7 @@ export default function App() {
           <img
             src="https://cdn.poehali.dev/projects/bb9a0de0-c4f3-43a3-86ce-c6d3cbe383e8/bucket/f5ecea76-05c7-4ea3-8a23-e7fd1b8ad69a.png"
             alt="VINADMIN"
-            className={sidebarOpen ? "h-8" : "h-6"}
+            className={sidebarOpen ? "h-6" : "h-5"}
           />
         </div>
 
