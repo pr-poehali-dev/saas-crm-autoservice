@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Icon from "@/components/ui/icon";
 import AppointmentsModule from "@/pages/AppointmentsModule";
+import WarehousesModule from "@/pages/WarehousesModule";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ModuleId =
@@ -365,7 +366,8 @@ export default function App() {
             </div>
 
             {activeModule === "dashboard" && <Dashboard />}
-            {activeModule !== "dashboard" && (
+            {activeModule === "warehouses" && <WarehousesModule />}
+            {activeModule !== "dashboard" && activeModule !== "warehouses" && (
               <ModulePlaceholder item={activeItem} />
             )}
           </main>
