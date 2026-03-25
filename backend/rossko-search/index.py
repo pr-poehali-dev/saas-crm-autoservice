@@ -1,4 +1,4 @@
-"""Прокси для поиска запчастей через SOAP API Rossko."""
+"""Прокси для поиска запчастей через SOAP API Rossko. v2."""
 
 import json
 import os
@@ -120,10 +120,41 @@ def parse_search(xml_text):
                 "brand": brand,
                 "partnumber": partnumber,
                 "name": name,
-                "stocks": stocks,
+                "stocks": filter_stocks(stocks),
             })
 
     return {"success": True, "parts": parts}
+
+
+def filter_stocks(stocks, top_n=5):
+    """Оставляем топ-5 по цене + топ-5 по сроку (уникальные)."""
+    if len(stocks) <= top_n:
+        return stocks
+
+    def price_key(s):
+        try:
+            return float(s.get("price", 0))
+        except (ValueError, TypeError):
+            return 999999
+
+    def delivery_key(s):
+        try:
+            return int(s.get("delivery", 0))
+        except (ValueError, TypeError):
+            return 999
+
+    by_price = sorted(stocks, key=price_key)[:top_n]
+    by_delivery = sorted(stocks, key=lambda s: (delivery_key(s), price_key(s)))[:top_n]
+
+    seen = set()
+    result = []
+    for s in by_price + by_delivery:
+        key = s.get("id", "") + s.get("price", "") + s.get("delivery", "")
+        if key not in seen:
+            seen.add(key)
+            result.append(s)
+
+    return sorted(result, key=price_key)
 
 
 def handler(event, context):
