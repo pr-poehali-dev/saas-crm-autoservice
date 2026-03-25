@@ -20,7 +20,7 @@ def resp(status, body):
     return {"statusCode": status, "headers": CORS_HEADERS, "body": json.dumps(body, ensure_ascii=False)}
 
 
-def berg_fetch(api_key, text, brand_id="", analogs="0"):
+def berg_fetch(api_key, text, brand_id="", analogs="1"):
     """Запрос к API Berg. Возвращает (status_code, body_str)."""
     p = {"key": api_key, "items[0][resource_article]": text, "analogs": analogs}
     if brand_id:
