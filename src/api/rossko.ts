@@ -23,19 +23,15 @@ export interface BrandOption {
   name: string;
   article: string;
   description?: string;
-  supplier: string;
+  suppliers: string[];
 }
 
-export interface SearchResponse {
-  success: boolean;
-  parts: Part[];
-  brands?: BrandOption[];
-  error?: string;
-  message?: string;
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[\s.\-_/\\]/g, "");
 }
 
 export async function fetchBrands(text: string): Promise<BrandOption[]> {
-  const brands: BrandOption[] = [];
+  const raw: { name: string; article: string; description: string; supplier: string; id: string }[] = [];
 
   const [rosskoRes, bergRes] = await Promise.allSettled([
     fetch(`${ROSSKO_URL}?text=${encodeURIComponent(text)}`),
@@ -45,73 +41,84 @@ export async function fetchBrands(text: string): Promise<BrandOption[]> {
   if (rosskoRes.status === "fulfilled" && rosskoRes.value.ok) {
     try {
       const data = await rosskoRes.value.json();
-      if (data.parts) {
-        const seen = new Set<string>();
-        for (const p of data.parts) {
-          const key = `${p.brand}-${p.partnumber}`.toLowerCase();
-          if (!seen.has(key)) {
-            seen.add(key);
-            brands.push({ id: p.guid, name: p.brand, article: p.partnumber, description: p.name, supplier: "rossko" });
-          }
+      const seen = new Set<string>();
+      for (const p of (data.parts || [])) {
+        const key = norm(p.brand) + "|" + norm(p.partnumber);
+        if (!seen.has(key)) {
+          seen.add(key);
+          raw.push({ name: p.brand, article: p.partnumber, description: p.name, supplier: "rossko", id: p.guid });
         }
       }
-    } catch { /* ignore */ }
+    } catch { /* */ }
   }
 
   if (bergRes.status === "fulfilled" && bergRes.value.ok) {
     try {
       const data = await bergRes.value.json();
-      if (data.brands) {
-        for (const b of data.brands) {
-          brands.push({ id: b.id, name: b.name, article: b.article || text, description: b.description, supplier: "berg" });
+      for (const b of (data.brands || [])) {
+        raw.push({ name: b.name, article: b.article || text, description: b.description || "", supplier: "berg", id: String(b.id) });
+      }
+      if (!data.brands && data.parts) {
+        const seen = new Set<string>();
+        for (const p of data.parts) {
+          const key = norm(p.brand) + "|" + norm(p.partnumber);
+          if (!seen.has(key)) {
+            seen.add(key);
+            raw.push({ name: p.brand, article: p.partnumber, description: p.name, supplier: "berg", id: p.guid });
+          }
         }
       }
-    } catch { /* ignore */ }
+    } catch { /* */ }
   }
 
-  return brands;
+  const map = new Map<string, BrandOption>();
+  for (const r of raw) {
+    const key = norm(r.name);
+    const existing = map.get(key);
+    if (existing) {
+      if (!existing.suppliers.includes(r.supplier)) existing.suppliers.push(r.supplier);
+      if (!existing.description && r.description) existing.description = r.description;
+    } else {
+      map.set(key, { id: r.id, name: r.name, article: r.article, description: r.description, suppliers: [r.supplier] });
+    }
+  }
+
+  return Array.from(map.values());
 }
 
-export async function searchByBrand(text: string, brand: string, supplier?: string): Promise<Part[]> {
-  const parts: Part[] = [];
+export async function searchByBrand(text: string, brand: string): Promise<Part[]> {
+  const brandNorm = norm(brand);
 
-  const fetches: Promise<Part[]>[] = [];
+  const [rosskoRes, bergRes] = await Promise.allSettled([
+    fetch(`${ROSSKO_URL}?text=${encodeURIComponent(text)}`)
+      .then((r) => r.ok ? r.json() : { parts: [] })
+      .then((d) => (d.parts || [])
+        .filter((p: Part) => norm(p.brand) === brandNorm)
+        .map((p: Part) => ({
+          ...p,
+          supplier: "rossko",
+          stocks: (p.stocks || []).map((s) => ({ ...s, delivery: s.delivery || "0" })),
+        }))
+      )
+      .catch(() => [] as Part[]),
 
-  if (!supplier || supplier === "rossko") {
-    fetches.push(
-      fetch(`${ROSSKO_URL}?text=${encodeURIComponent(text)}`)
-        .then((r) => r.ok ? r.json() : { parts: [] })
-        .then((d) => (d.parts || []).filter((p: Part) => p.brand.toLowerCase() === brand.toLowerCase()).map((p: Part) => ({ ...p, supplier: "rossko" })))
-        .catch(() => [])
-    );
-  }
-
-  if (!supplier || supplier === "berg") {
-    fetches.push(
-      fetch(`${BERG_URL}?text=${encodeURIComponent(text)}&brands_only=1`)
-        .then(async (r) => {
-          if (!r.ok) return [];
-          const d = await r.json();
-          const br = (d.brands || []).find((b: BrandOption) => b.name.toLowerCase() === brand.toLowerCase());
-          if (!br) return [];
-          const r2 = await fetch(`${BERG_URL}?text=${encodeURIComponent(text)}&brand_id=${br.id}`);
-          if (!r2.ok) return [];
-          const d2 = await r2.json();
-          return (d2.parts || []).map((p: Part) => ({ ...p, supplier: "berg" }));
-        })
-        .catch(() => [])
-    );
-  }
-
-  const results = await Promise.all(fetches);
-  for (const r of results) parts.push(...r);
-  return parts;
-}
-
-export async function searchAllSuppliers(text: string): Promise<Part[]> {
-  const [rossko, berg] = await Promise.all([
-    fetch(`${ROSSKO_URL}?text=${encodeURIComponent(text)}`).then((r) => r.ok ? r.json() : { parts: [] }).then((d) => (d.parts || []).map((p: Part) => ({ ...p, supplier: p.supplier || "rossko" }))).catch(() => []),
-    fetch(`${BERG_URL}?text=${encodeURIComponent(text)}`).then((r) => r.ok ? r.json() : { parts: [] }).then((d) => (d.parts || []).map((p: Part) => ({ ...p, supplier: p.supplier || "berg" }))).catch(() => []),
+    fetch(`${BERG_URL}?text=${encodeURIComponent(text)}&brands_only=1`)
+      .then(async (r) => {
+        if (!r.ok) return [] as Part[];
+        const d = await r.json();
+        const allBrands = d.brands || [];
+        const br = allBrands.find((b: { name: string }) => norm(b.name) === brandNorm);
+        if (!br) return [] as Part[];
+        const r2 = await fetch(`${BERG_URL}?text=${encodeURIComponent(text)}&brand_id=${br.id}`);
+        if (!r2.ok) return [] as Part[];
+        const d2 = await r2.json();
+        return (d2.parts || []).map((p: Part) => ({ ...p, supplier: "berg" }));
+      })
+      .catch(() => [] as Part[]),
   ]);
-  return [...rossko, ...berg];
+
+  const parts: Part[] = [];
+  if (rosskoRes.status === "fulfilled") parts.push(...rosskoRes.value);
+  if (bergRes.status === "fulfilled") parts.push(...bergRes.value);
+  return parts;
 }
