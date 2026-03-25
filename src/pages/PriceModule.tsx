@@ -84,7 +84,7 @@ export default function PriceModule() {
     setDeliveryFilter(Infinity);
     setSupplierFilter("");
     try {
-      const result = await searchByBrand(brand.article || query.trim(), brand.name);
+      const result = await searchByBrand(brand.article || query.trim(), brand.name, brand.bergId);
       if (result.length === 0) setError("Нет предложений для " + brand.name + " " + (brand.article || query.trim()));
       setParts(result);
     } catch (e) {

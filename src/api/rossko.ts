@@ -24,6 +24,7 @@ export interface BrandOption {
   article: string;
   description?: string;
   suppliers: string[];
+  bergId?: string;
 }
 
 function norm(s: string): string {
@@ -78,16 +79,21 @@ export async function fetchBrands(text: string): Promise<BrandOption[]> {
     if (existing) {
       if (!existing.suppliers.includes(r.supplier)) existing.suppliers.push(r.supplier);
       if (!existing.description && r.description) existing.description = r.description;
+      if (r.supplier === "berg" && !existing.bergId) existing.bergId = r.id;
     } else {
-      map.set(key, { id: r.id, name: r.name, article: r.article, description: r.description, suppliers: [r.supplier] });
+      map.set(key, { id: r.id, name: r.name, article: r.article, description: r.description, suppliers: [r.supplier], bergId: r.supplier === "berg" ? r.id : undefined });
     }
   }
 
   return Array.from(map.values());
 }
 
-export async function searchByBrand(text: string, brand: string): Promise<Part[]> {
+export async function searchByBrand(text: string, brand: string, bergBrandId?: string): Promise<Part[]> {
   const brandNorm = norm(brand);
+
+  const bergUrl = bergBrandId
+    ? `${BERG_URL}?text=${encodeURIComponent(text)}&brand_id=${bergBrandId}`
+    : `${BERG_URL}?text=${encodeURIComponent(text)}`;
 
   const [rosskoRes, bergRes] = await Promise.allSettled([
     fetch(`${ROSSKO_URL}?text=${encodeURIComponent(text)}`)
@@ -102,17 +108,13 @@ export async function searchByBrand(text: string, brand: string): Promise<Part[]
       )
       .catch(() => [] as Part[]),
 
-    fetch(`${BERG_URL}?text=${encodeURIComponent(text)}&brands_only=1`)
+    fetch(bergUrl)
       .then(async (r) => {
         if (!r.ok) return [] as Part[];
         const d = await r.json();
-        const allBrands = d.brands || [];
-        const br = allBrands.find((b: { name: string }) => norm(b.name) === brandNorm);
-        if (!br) return [] as Part[];
-        const r2 = await fetch(`${BERG_URL}?text=${encodeURIComponent(text)}&brand_id=${br.id}`);
-        if (!r2.ok) return [] as Part[];
-        const d2 = await r2.json();
-        return (d2.parts || []).map((p: Part) => ({ ...p, supplier: "berg" }));
+        return (d.parts || [])
+          .filter((p: Part) => norm(p.brand) === brandNorm)
+          .map((p: Part) => ({ ...p, supplier: "berg" }));
       })
       .catch(() => [] as Part[]),
   ]);
