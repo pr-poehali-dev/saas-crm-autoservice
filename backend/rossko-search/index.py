@@ -58,35 +58,15 @@ def get_checkout_details(key1, key2):
 
     for delivery in root.iter(f"{{{NS}}}delivery"):
         did = delivery.findtext(f"{{{NS}}}id", "")
-        if did:
+        if did and did.startswith("0"):
             delivery_id = did
-            for addr in delivery.iter(f"{{{NS}}}address"):
-                aid = addr.findtext(f"{{{NS}}}id", "")
-                if aid:
-                    address_id = aid
-                    break
-            if address_id:
-                break
+            break
 
-    if not delivery_id:
-        for el in root.iter(f"{{{NS}}}Delivery"):
-            for d in el.iter(f"{{{NS}}}delivery"):
-                did = d.findtext(f"{{{NS}}}id", "")
-                if did:
-                    delivery_id = did
-                    break
-            if delivery_id:
-                break
-
-    if not address_id:
-        for el in root.iter(f"{{{NS}}}Address"):
-            for a in el.iter(f"{{{NS}}}address"):
-                aid = a.findtext(f"{{{NS}}}id", "")
-                if aid:
-                    address_id = aid
-                    break
-            if address_id:
-                break
+    for address in root.iter(f"{{{NS}}}address"):
+        aid = address.findtext(f"{{{NS}}}id", "")
+        if aid:
+            address_id = aid
+            break
 
     return delivery_id, address_id, xml_text
 
