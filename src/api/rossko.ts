@@ -91,10 +91,6 @@ export async function fetchBrands(text: string): Promise<BrandOption[]> {
 export async function searchByBrand(text: string, brand: string, bergBrandId?: string): Promise<Part[]> {
   const brandNorm = norm(brand);
 
-  const bergUrl = bergBrandId
-    ? `${BERG_URL}?text=${encodeURIComponent(text)}&brand_id=${bergBrandId}`
-    : `${BERG_URL}?text=${encodeURIComponent(text)}`;
-
   const [rosskoRes, bergRes] = await Promise.allSettled([
     fetch(`${ROSSKO_URL}?text=${encodeURIComponent(text)}`)
       .then((r) => r.ok ? r.json() : { parts: [] })
@@ -107,7 +103,7 @@ export async function searchByBrand(text: string, brand: string, bergBrandId?: s
       )
       .catch(() => [] as Part[]),
 
-    fetch(bergUrl)
+    fetch(`${BERG_URL}?text=${encodeURIComponent(text)}`)
       .then(async (r) => {
         if (!r.ok) return [] as Part[];
         const d = await r.json();
