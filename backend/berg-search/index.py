@@ -20,6 +20,53 @@ def resp(status, body):
     return {"statusCode": status, "headers": CORS_HEADERS, "body": json.dumps(body, ensure_ascii=False)}
 
 
+def berg_request(api_key, text, brand_id="", analogs="0"):
+    """Запрос к API Berg."""
+    p = {"key": api_key, "items[0][resource_article]": text, "analogs": analogs}
+    if brand_id:
+        p["items[0][brand_id]"] = str(brand_id)
+    url = f"{BERG_URL}?{urllib.parse.urlencode(p)}"
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    return urllib.request.urlopen(req, timeout=15)
+
+
+def parse_offers(data):
+    """Парсим resources с offers."""
+    parts = []
+    for res_item in data.get("resources", []):
+        if not isinstance(res_item, dict):
+            continue
+        brand_raw = res_item.get("brand", "")
+        brand = brand_raw.get("name", "") if isinstance(brand_raw, dict) else str(brand_raw)
+        brand_id = brand_raw.get("id", "") if isinstance(brand_raw, dict) else ""
+        article = str(res_item.get("article", ""))
+        name = str(res_item.get("name", ""))
+
+        stocks = []
+        for o in (res_item.get("offers") or []):
+            if not isinstance(o, dict):
+                continue
+            wh = o.get("warehouse", {})
+            wh_name = wh.get("name", "") if isinstance(wh, dict) else str(wh or "")
+            stocks.append({
+                "id": str(o.get("id", "")),
+                "price": str(o.get("price", 0)),
+                "count": str(o.get("quantity", 0)),
+                "delivery": str(o.get("average_period", 0)),
+                "description": wh_name,
+            })
+        if article:
+            parts.append({
+                "guid": str(brand_id),
+                "brand": brand,
+                "partnumber": article,
+                "name": name,
+                "stocks": stocks,
+                "supplier": "berg",
+            })
+    return parts
+
+
 def handler(event, context):
     """Поиск запчастей у поставщика Berg.ru по артикулу."""
 
@@ -27,7 +74,6 @@ def handler(event, context):
         return {"statusCode": 200, "headers": CORS_HEADERS, "body": ""}
 
     api_key = os.environ.get("BERG_API_KEY", "").strip()
-
     if not api_key:
         return resp(500, {"error": "API-ключ Berg не настроен"})
 
@@ -41,23 +87,20 @@ def handler(event, context):
             pass
 
     text = (params.get("text") or body_data.get("text", "")).strip()
+    brand_id = params.get("brand_id") or body_data.get("brand_id", "")
+    brands_only = params.get("brands_only") or body_data.get("brands_only", "")
 
     if not text:
         return resp(400, {"error": "Укажите артикул (параметр text)"})
 
     try:
-        qs = urllib.parse.urlencode({
-            "key": api_key,
-            "items[0][resource_article]": text,
-            "analogs": "1",
-        })
-
-        url = f"{BERG_URL}?{qs}"
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
-
         try:
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with berg_request(api_key, text, brand_id) as response:
                 raw = response.read().decode("utf-8")
+            data = json.loads(raw)
+            parts = parse_offers(data)
+            return resp(200, {"success": True, "parts": parts})
+
         except urllib.error.HTTPError as e:
             err_body = ""
             try:
@@ -66,134 +109,48 @@ def handler(event, context):
                 pass
 
             if e.code == 300 and err_body:
-                try:
-                    ambig = json.loads(err_body)
-                    all_parts = []
-                    for r in ambig.get("resources", []):
-                        b = r.get("brand", {})
-                        brand_name = b.get("name", "") if isinstance(b, dict) else str(b)
-                        brand_id = b.get("id", "") if isinstance(b, dict) else ""
-                        art = r.get("article", text)
-                        name = r.get("name", "")
+                ambig = json.loads(err_body)
+                brands = []
+                for r in ambig.get("resources", []):
+                    b = r.get("brand", {})
+                    if isinstance(b, dict) and b.get("name"):
+                        brands.append({
+                            "id": str(b.get("id", "")),
+                            "name": b["name"],
+                            "article": r.get("article", text),
+                            "description": r.get("name", ""),
+                        })
 
-                        try:
-                            qs2 = urllib.parse.urlencode({
-                                "key": api_key,
-                                "items[0][resource_article]": art,
-                                "items[0][brand_id]": str(brand_id),
-                                "analogs": "0",
-                            })
-                            req2 = urllib.request.Request(f"{BERG_URL}?{qs2}", headers={"Accept": "application/json"})
-                            with urllib.request.urlopen(req2, timeout=10) as resp2:
-                                raw2 = resp2.read().decode("utf-8")
-                            data2 = json.loads(raw2)
-                            offers = []
-                            for res2 in data2.get("resources", []):
-                                for o in (res2.get("offers") or []):
-                                    if isinstance(o, dict):
-                                        offers.append(o)
-                            stocks = []
-                            for o in offers:
-                                wh = o.get("warehouse", {})
-                                wh_name = wh.get("name", "") if isinstance(wh, dict) else str(wh or "")
-                                stocks.append({
-                                    "id": str(o.get("id", "")),
-                                    "price": str(o.get("price", 0)),
-                                    "count": str(o.get("quantity", 0)),
-                                    "delivery": str(o.get("average_period", 0)),
-                                    "description": wh_name,
-                                })
-                            all_parts.append({
-                                "guid": str(brand_id),
-                                "brand": brand_name,
-                                "partnumber": art,
-                                "name": name,
-                                "stocks": stocks,
-                                "supplier": "berg",
-                            })
-                        except Exception:
-                            all_parts.append({
-                                "guid": str(brand_id),
-                                "brand": brand_name,
-                                "partnumber": art,
-                                "name": name,
-                                "stocks": [],
-                                "supplier": "berg",
-                            })
+                if brands_only == "1":
+                    return resp(200, {"success": True, "parts": [], "brands": brands})
 
-                    return resp(200, {"success": True, "parts": all_parts})
-                except Exception as ex:
-                    return resp(200, {"success": False, "parts": [], "error": f"Ошибка разбора 300: {str(ex)}"})
+                if brand_id:
+                    try:
+                        with berg_request(api_key, text, brand_id) as resp2:
+                            raw2 = resp2.read().decode("utf-8")
+                        parts = parse_offers(json.loads(raw2))
+                        return resp(200, {"success": True, "parts": parts})
+                    except Exception:
+                        pass
 
-            return resp(200, {"success": False, "parts": [], "error": f"Berg HTTP {e.code}", "debug": err_body[:500]})
+                all_parts = []
+                for br in brands[:5]:
+                    try:
+                        with berg_request(api_key, text, br["id"]) as resp3:
+                            raw3 = resp3.read().decode("utf-8")
+                        all_parts.extend(parse_offers(json.loads(raw3)))
+                    except Exception:
+                        all_parts.append({
+                            "guid": br["id"], "brand": br["name"],
+                            "partnumber": br.get("article", text),
+                            "name": br.get("description", ""), "stocks": [], "supplier": "berg",
+                        })
+
+                return resp(200, {"success": True, "parts": all_parts, "brands": brands})
+
+            return resp(200, {"success": False, "parts": [], "error": f"Berg HTTP {e.code}"})
         except Exception as e:
-            return resp(200, {"success": False, "parts": [], "error": f"Ошибка соединения: {str(e)}"})
-
-        try:
-            data = json.loads(raw)
-        except Exception:
-            return resp(200, {"success": False, "parts": [], "error": "Некорректный JSON", "debug": raw[:500]})
-
-        parts = []
-
-        resources = []
-        if isinstance(data, dict):
-            resources = data.get("resources", [])
-            if not resources and "items" in data:
-                resources = data.get("items", [])
-
-        if isinstance(data, list):
-            resources = data
-
-        for res_item in resources:
-            if not isinstance(res_item, dict):
-                continue
-
-            brand_raw = res_item.get("brand", "")
-            if isinstance(brand_raw, dict):
-                brand = brand_raw.get("name", "")
-            else:
-                brand = str(brand_raw)
-
-            article = str(res_item.get("article", res_item.get("resource_article", "")))
-            name = str(res_item.get("name", res_item.get("description", "")))
-
-            offers = res_item.get("offers", [])
-            if not isinstance(offers, list):
-                offers = []
-
-            stocks = []
-            for offer in offers:
-                if not isinstance(offer, dict):
-                    continue
-                price = offer.get("price", 0)
-                quantity = offer.get("quantity", offer.get("count", 0))
-                delivery = offer.get("average_period", offer.get("delivery_period", offer.get("delivery", 0)))
-                warehouse = offer.get("warehouse", {})
-                if isinstance(warehouse, dict):
-                    wh_name = warehouse.get("name", warehouse.get("title", ""))
-                else:
-                    wh_name = str(warehouse) if warehouse else ""
-
-                stocks.append({
-                    "id": str(offer.get("id", offer.get("offer_id", ""))),
-                    "price": str(price),
-                    "count": str(quantity),
-                    "delivery": str(delivery),
-                    "description": wh_name,
-                })
-
-            if article:
-                parts.append({
-                    "guid": str(res_item.get("id", res_item.get("resource_id", ""))),
-                    "brand": brand,
-                    "partnumber": article,
-                    "name": name,
-                    "stocks": stocks,
-                    "supplier": "berg",
-                })
-
-        return resp(200, {"success": True, "parts": parts, "debug_raw": raw[:1000] if not parts else ""})
+            return resp(200, {"success": False, "parts": [], "error": f"Ошибка: {str(e)}"})
 
     except Exception as e:
         return resp(200, {"success": False, "parts": [], "error": str(e)})
