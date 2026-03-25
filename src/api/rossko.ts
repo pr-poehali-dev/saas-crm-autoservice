@@ -119,8 +119,28 @@ export async function searchByBrand(text: string, brand: string, bergBrandId?: s
       .catch(() => [] as Part[]),
   ]);
 
-  const parts: Part[] = [];
-  if (rosskoRes.status === "fulfilled") parts.push(...rosskoRes.value);
-  if (bergRes.status === "fulfilled") parts.push(...bergRes.value);
-  return parts;
+  const raw: Part[] = [];
+  if (rosskoRes.status === "fulfilled") raw.push(...rosskoRes.value);
+  if (bergRes.status === "fulfilled") raw.push(...bergRes.value);
+
+  const grouped = new Map<string, Part>();
+  for (const p of raw) {
+    const key = norm(p.brand) + "|" + norm(p.partnumber);
+    const existing = grouped.get(key);
+    if (existing) {
+      for (const s of p.stocks) {
+        existing.stocks.push({ ...s, description: s.description ? `${s.description} [${p.supplier}]` : `[${p.supplier}]` });
+      }
+      if (!existing.name && p.name) existing.name = p.name;
+    } else {
+      grouped.set(key, {
+        ...p,
+        brand: p.brand.toUpperCase(),
+        supplier: "all",
+        stocks: p.stocks.map((s) => ({ ...s, description: s.description ? `${s.description} [${p.supplier}]` : `[${p.supplier}]` })),
+      });
+    }
+  }
+
+  return Array.from(grouped.values());
 }

@@ -106,21 +106,27 @@ export default function PriceModule() {
     return prices.length > 0 ? Math.min(...prices) : 0;
   };
 
+  const stockSupplier = (desc: string) => {
+    if (desc.includes("[rossko]")) return "rossko";
+    if (desc.includes("[berg]")) return "berg";
+    return "";
+  };
+
   const filterStocks = (stocks: Part["stocks"]) => {
     let f = stocks;
-    if (deliveryFilter !== Infinity) {
-      f = f.filter((s) => deliveryDays(s.delivery) <= deliveryFilter);
-    }
+    if (supplierFilter) f = f.filter((s) => stockSupplier(s.description) === supplierFilter);
+    if (deliveryFilter !== Infinity) f = f.filter((s) => deliveryDays(s.delivery) <= deliveryFilter);
     return f;
   };
 
   const filteredParts = parts
-    .filter((p) => !supplierFilter || p.supplier === supplierFilter)
     .map((p) => ({ ...p, stocks: filterStocks(p.stocks) }))
-    .filter((p) => p.stocks.length > 0 || deliveryFilter === Infinity);
+    .filter((p) => p.stocks.length > 0);
 
   const totalStocks = filteredParts.reduce((s, p) => s + p.stocks.length, 0);
-  const suppliers = [...new Set(parts.map((p) => p.supplier))];
+  const allStockSuppliers = new Set<string>();
+  for (const p of parts) for (const s of p.stocks) { const sup = stockSupplier(s.description); if (sup) allStockSuppliers.add(sup); }
+  const suppliers = Array.from(allStockSuppliers);
 
   return (
     <div>
@@ -227,10 +233,11 @@ export default function PriceModule() {
                 style={!supplierFilter ? { background: "hsl(var(--primary))" } : {}}>Все</button>
               {suppliers.map((s) => {
                 const sup = SUP[s] || { name: s, color: "" };
+                const cnt = parts.reduce((a, p) => a + p.stocks.filter((st) => stockSupplier(st.description) === s).length, 0);
                 return (
                   <button key={s} onClick={() => setSupplierFilter(supplierFilter === s ? "" : s)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${supplierFilter === s ? sup.color : "text-muted-foreground hover:bg-secondary"}`}>
-                    {sup.name} ({parts.filter((p) => p.supplier === s).length})
+                    {sup.name} ({cnt})
                   </button>
                 );
               })}
@@ -240,10 +247,10 @@ export default function PriceModule() {
           {filteredParts.length > 0 && (
             <div className="space-y-3">
               {filteredParts.map((part, idx) => {
-                const key = `${part.supplier}-${part.guid || idx}`;
+                const key = `${part.brand}-${part.partnumber}-${idx}`;
                 const isOpen = expanded === key;
                 const minPrice = bestPrice(part);
-                const sup = SUP[part.supplier] || { name: part.supplier, color: "bg-gray-500/15 text-gray-600" };
+                const partSuppliers = [...new Set(part.stocks.map((s) => stockSupplier(s.description)).filter(Boolean))];
                 return (
                   <div key={key} className="rounded-xl border overflow-hidden transition-shadow hover:shadow-md"
                     style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
@@ -255,7 +262,10 @@ export default function PriceModule() {
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-bold text-foreground">{part.brand}</span>
                           <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ background: "hsl(var(--secondary))" }}>{part.partnumber}</span>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ${sup.color}`}>{sup.name}</span>
+                          {partSuppliers.map((s) => {
+                            const sup = SUP[s] || { name: s, color: "bg-gray-500/15 text-gray-600" };
+                            return <span key={s} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ${sup.color}`}>{sup.name}</span>;
+                          })}
                         </div>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">{part.name}</p>
                       </div>
@@ -267,24 +277,30 @@ export default function PriceModule() {
                     </div>
                     {isOpen && part.stocks.length > 0 && (
                       <div className="border-t" style={{ borderColor: "hsl(var(--border))" }}>
-                        <div className="grid grid-cols-[1fr_100px_80px_100px_40px] gap-2 px-5 py-2 text-[10px] font-bold text-muted-foreground uppercase">
-                          <span>Склад</span><span className="text-right">Цена</span><span className="text-center">Наличие</span><span className="text-center">Срок</span><span />
+                        <div className="grid grid-cols-[60px_1fr_100px_80px_100px_40px] gap-2 px-5 py-2 text-[10px] font-bold text-muted-foreground uppercase">
+                          <span>Источник</span><span>Склад</span><span className="text-right">Цена</span><span className="text-center">Наличие</span><span className="text-center">Срок</span><span />
                         </div>
-                        {part.stocks.sort((a, b) => parseFloat(a.price) - parseFloat(b.price)).map((stock, i) => (
-                          <div key={`${stock.id}-${i}`}
-                            className="grid grid-cols-[1fr_100px_80px_100px_40px] gap-2 px-5 py-2.5 items-center border-t text-sm hover:bg-secondary/50 transition-colors"
-                            style={{ borderColor: "hsl(var(--border))" }}>
-                            <span className="text-xs text-foreground truncate">{stock.description || stock.id}</span>
-                            <span className="text-right font-bold text-foreground">{formatPrice(stock.price)}</span>
-                            <span className={`text-center text-xs font-bold ${parseInt(stock.count) > 0 ? "text-green-600" : "text-red-500"}`}>
-                              {parseInt(stock.count) > 0 ? `${stock.count} шт` : "Нет"}
-                            </span>
-                            <span className="text-center text-xs text-muted-foreground">{formatDays(stock.delivery)}</span>
-                            <button className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-primary/10 transition-colors" title="В корзину">
-                              <Icon name="ShoppingCart" size={14} className="text-primary" />
-                            </button>
-                          </div>
-                        ))}
+                        {part.stocks.sort((a, b) => parseFloat(a.price) - parseFloat(b.price)).map((stock, i) => {
+                          const sSup = stockSupplier(stock.description);
+                          const supCfg = SUP[sSup] || { name: "", color: "" };
+                          const cleanDesc = stock.description.replace(/\s*\[(rossko|berg)\]/g, "").trim();
+                          return (
+                            <div key={`${stock.id}-${i}`}
+                              className="grid grid-cols-[60px_1fr_100px_80px_100px_40px] gap-2 px-5 py-2.5 items-center border-t text-sm hover:bg-secondary/50 transition-colors"
+                              style={{ borderColor: "hsl(var(--border))" }}>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full text-center uppercase ${supCfg.color}`}>{supCfg.name}</span>
+                              <span className="text-xs text-foreground truncate">{cleanDesc || stock.id}</span>
+                              <span className="text-right font-bold text-foreground">{formatPrice(stock.price)}</span>
+                              <span className={`text-center text-xs font-bold ${parseInt(stock.count) > 0 ? "text-green-600" : "text-red-500"}`}>
+                                {parseInt(stock.count) > 0 ? `${stock.count} шт` : "Нет"}
+                              </span>
+                              <span className="text-center text-xs text-muted-foreground">{formatDays(stock.delivery)}</span>
+                              <button className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-primary/10 transition-colors" title="В корзину">
+                                <Icon name="ShoppingCart" size={14} className="text-primary" />
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
