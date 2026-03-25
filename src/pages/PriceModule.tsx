@@ -244,15 +244,32 @@ export default function PriceModule() {
             </div>
           )}
 
-          {filteredParts.length > 0 && (
+          {filteredParts.length > 0 && (() => {
+            const selBrandNorm = selectedBrand ? selectedBrand.name.toLowerCase().replace(/[\s.\-_/\\]/g, "") : "";
+            let analogHeaderShown = false;
+            return (
             <div className="space-y-3">
               {filteredParts.map((part, idx) => {
+                const isMainBrand = selBrandNorm && part.brand.toLowerCase().replace(/[\s.\-_/\\]/g, "") === selBrandNorm;
+                let showAnalogHeader = false;
+                if (!isMainBrand && !analogHeaderShown && selBrandNorm) {
+                  analogHeaderShown = true;
+                  showAnalogHeader = true;
+                }
                 const key = `${part.brand}-${part.partnumber}-${idx}`;
                 const isOpen = expanded === key;
                 const minPrice = bestPrice(part);
                 const partSuppliers = [...new Set(part.stocks.map((s) => stockSupplier(s.description)).filter(Boolean))];
                 return (
-                  <div key={key} className="rounded-xl border overflow-hidden transition-shadow hover:shadow-md"
+                  <div key={key}>
+                  {showAnalogHeader && (
+                    <div className="flex items-center gap-3 my-4">
+                      <div className="h-px flex-1" style={{ background: "hsl(var(--border))" }} />
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Аналоги</span>
+                      <div className="h-px flex-1" style={{ background: "hsl(var(--border))" }} />
+                    </div>
+                  )}
+                  <div className="rounded-xl border overflow-hidden transition-shadow hover:shadow-md"
                     style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
                     <div className="flex items-center gap-4 px-5 py-3.5 cursor-pointer" onClick={() => setExpanded(isOpen ? null : key)}>
                       <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: "hsl(var(--primary) / 0.1)" }}>
@@ -304,10 +321,12 @@ export default function PriceModule() {
                       </div>
                     )}
                   </div>
+                  </div>
                 );
               })}
             </div>
-          )}
+            );
+          })()}
 
           {filteredParts.length === 0 && parts.length > 0 && !error && (
             <div className="flex flex-col items-center justify-center gap-3 py-12">

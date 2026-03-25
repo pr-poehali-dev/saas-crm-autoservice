@@ -99,11 +99,10 @@ export async function searchByBrand(text: string, brand: string, bergBrandId?: s
     fetch(`${ROSSKO_URL}?text=${encodeURIComponent(text)}`)
       .then((r) => r.ok ? r.json() : { parts: [] })
       .then((d) => (d.parts || [])
-        .filter((p: Part) => norm(p.brand) === brandNorm)
         .map((p: Part) => ({
           ...p,
           supplier: "rossko",
-          stocks: (p.stocks || []).map((s) => ({ ...s, delivery: s.delivery || "0" })),
+          stocks: (p.stocks || []).map((s: Part["stocks"][0]) => ({ ...s, delivery: s.delivery || "0" })),
         }))
       )
       .catch(() => [] as Part[]),
@@ -112,9 +111,7 @@ export async function searchByBrand(text: string, brand: string, bergBrandId?: s
       .then(async (r) => {
         if (!r.ok) return [] as Part[];
         const d = await r.json();
-        return (d.parts || [])
-          .filter((p: Part) => norm(p.brand) === brandNorm)
-          .map((p: Part) => ({ ...p, supplier: "berg" }));
+        return (d.parts || []).map((p: Part) => ({ ...p, supplier: "berg" }));
       })
       .catch(() => [] as Part[]),
   ]);
@@ -142,5 +139,12 @@ export async function searchByBrand(text: string, brand: string, bergBrandId?: s
     }
   }
 
-  return Array.from(grouped.values());
+  const result = Array.from(grouped.values());
+  result.sort((a, b) => {
+    const aMatch = norm(a.brand) === brandNorm ? 0 : 1;
+    const bMatch = norm(b.brand) === brandNorm ? 0 : 1;
+    if (aMatch !== bMatch) return aMatch - bMatch;
+    return b.stocks.length - a.stocks.length;
+  });
+  return result;
 }
