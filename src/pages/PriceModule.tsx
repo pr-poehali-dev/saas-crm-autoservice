@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Icon from "@/components/ui/icon";
-import { searchRossko, type RosskoPart } from "@/api/rossko";
+import { searchAllSuppliers, type Part } from "@/api/rossko";
 
 function formatPrice(p: string) {
   const n = parseFloat(p);
@@ -16,13 +16,19 @@ function formatDays(d: string) {
   return `${n} дней`;
 }
 
+const SUPPLIER_LABELS: Record<string, { name: string; color: string }> = {
+  rossko: { name: "Rossko", color: "bg-orange-500/15 text-orange-600" },
+  berg: { name: "Berg", color: "bg-blue-500/15 text-blue-600" },
+};
+
 export default function PriceModule() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [parts, setParts] = useState<RosskoPart[]>([]);
+  const [parts, setParts] = useState<Part[]>([]);
   const [searched, setSearched] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [supplierFilter, setSupplierFilter] = useState<string>("");
 
   const search = async () => {
     if (!query.trim()) return;
@@ -31,11 +37,11 @@ export default function PriceModule() {
     setParts([]);
     setSearched(true);
     try {
-      const res = await searchRossko(query.trim());
-      if (!res.success && res.parts.length === 0) {
+      const results = await searchAllSuppliers(query.trim());
+      if (results.length === 0) {
         setError("Ничего не найдено по данному артикулу");
       } else {
-        setParts(res.parts);
+        setParts(results);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка поиска");
@@ -46,12 +52,17 @@ export default function PriceModule() {
 
   const onKey = (e: React.KeyboardEvent) => { if (e.key === "Enter") search(); };
 
-  const bestPrice = (part: RosskoPart) => {
+  const bestPrice = (part: Part) => {
     const prices = part.stocks.map((s) => parseFloat(s.price)).filter((p) => !isNaN(p) && p > 0);
     return prices.length > 0 ? Math.min(...prices) : 0;
   };
 
-  const totalStocks = parts.reduce((s, p) => s + p.stocks.length, 0);
+  const filtered = supplierFilter ? parts.filter((p) => p.supplier === supplierFilter) : parts;
+  const totalStocks = filtered.reduce((s, p) => s + p.stocks.length, 0);
+
+  const suppliers = [...new Set(parts.map((p) => p.supplier))];
+  const rosskoCount = parts.filter((p) => p.supplier === "rossko").length;
+  const bergCount = parts.filter((p) => p.supplier === "berg").length;
 
   return (
     <div>
@@ -65,7 +76,7 @@ export default function PriceModule() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKey}
-              placeholder="Введите артикул запчасти, например: 1K0615301AD"
+              placeholder="Введите артикул запчасти, например: 107130"
               className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]"
               style={{ background: "hsl(var(--secondary))", border: "1px solid hsl(var(--border))" }}
             />
@@ -89,9 +100,11 @@ export default function PriceModule() {
             )}
           </button>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-2">
-          Поиск по каталогам поставщиков Rossko. Результаты включают цены, наличие и сроки доставки.
-        </p>
+        <div className="flex items-center gap-3 mt-2">
+          <p className="text-[11px] text-muted-foreground">
+            Поиск по каталогам: Rossko, Berg. Результаты включают цены, наличие и сроки доставки.
+          </p>
+        </div>
       </div>
 
       {error && (
@@ -104,20 +117,41 @@ export default function PriceModule() {
 
       {parts.length > 0 && (
         <>
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-4 flex-wrap">
             <span className="text-sm text-muted-foreground">
-              Найдено: <strong className="text-foreground">{parts.length}</strong> позиций, <strong className="text-foreground">{totalStocks}</strong> предложений
+              Найдено: <strong className="text-foreground">{filtered.length}</strong> позиций, <strong className="text-foreground">{totalStocks}</strong> предложений
             </span>
+            <div className="flex gap-1.5 ml-auto">
+              <button onClick={() => setSupplierFilter("")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${!supplierFilter ? "text-white" : "text-muted-foreground hover:bg-secondary"}`}
+                style={!supplierFilter ? { background: "hsl(var(--primary))" } : {}}>
+                Все ({parts.length})
+              </button>
+              {suppliers.includes("rossko") && (
+                <button onClick={() => setSupplierFilter(supplierFilter === "rossko" ? "" : "rossko")}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${supplierFilter === "rossko" ? "bg-orange-500/20 text-orange-600" : "text-muted-foreground hover:bg-secondary"}`}>
+                  Rossko ({rosskoCount})
+                </button>
+              )}
+              {suppliers.includes("berg") && (
+                <button onClick={() => setSupplierFilter(supplierFilter === "berg" ? "" : "berg")}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${supplierFilter === "berg" ? "bg-blue-500/20 text-blue-600" : "text-muted-foreground hover:bg-secondary"}`}>
+                  Berg ({bergCount})
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-3">
-            {parts.map((part) => {
-              const isOpen = expanded === part.guid;
+            {filtered.map((part, idx) => {
+              const key = `${part.supplier}-${part.guid || idx}`;
+              const isOpen = expanded === key;
               const minPrice = bestPrice(part);
+              const sup = SUPPLIER_LABELS[part.supplier] || { name: part.supplier, color: "bg-gray-500/15 text-gray-600" };
               return (
-                <div key={part.guid} className="rounded-xl border overflow-hidden transition-shadow hover:shadow-md"
+                <div key={key} className="rounded-xl border overflow-hidden transition-shadow hover:shadow-md"
                   style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}>
-                  <div className="flex items-center gap-4 px-5 py-3.5 cursor-pointer" onClick={() => setExpanded(isOpen ? null : part.guid)}>
+                  <div className="flex items-center gap-4 px-5 py-3.5 cursor-pointer" onClick={() => setExpanded(isOpen ? null : key)}>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: "hsl(var(--primary) / 0.1)" }}>
                       <Icon name="Package" size={18} className="text-primary" />
                     </div>
@@ -125,6 +159,7 @@ export default function PriceModule() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-foreground">{part.brand}</span>
                         <span className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ background: "hsl(var(--secondary))" }}>{part.partnumber}</span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase ${sup.color}`}>{sup.name}</span>
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{part.name}</p>
                     </div>
@@ -183,6 +218,10 @@ export default function PriceModule() {
             <Icon name="Search" size={32} className="text-primary" />
           </div>
           <p className="text-sm text-muted-foreground">Введите артикул для поиска запчастей у поставщиков</p>
+          <div className="flex gap-2 mt-1">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-600">Rossko</span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600">Berg</span>
+          </div>
         </div>
       )}
     </div>
