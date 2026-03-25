@@ -1,4 +1,4 @@
-"""Прокси для поиска запчастей через SOAP API Rossko. v2."""
+"""Прокси для поиска запчастей через SOAP API Rossko. v3."""
 
 import json
 import os

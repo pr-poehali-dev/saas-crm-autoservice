@@ -1,4 +1,4 @@
-"""Прокси для поиска запчастей через REST API Berg.ru."""
+"""Прокси для поиска запчастей через REST API Berg.ru. v2."""
 
 import json
 import os
