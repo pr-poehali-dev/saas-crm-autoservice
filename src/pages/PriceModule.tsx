@@ -27,11 +27,13 @@ const SUP: Record<string, { name: string; color: string }> = {
 };
 
 const DELIVERY_FILTERS = [
-  { label: "Все сроки", max: Infinity },
   { label: "В наличии", max: 0 },
+  { label: "1 день", max: 1 },
+  { label: "2 дня", max: 2 },
   { label: "До 3 дней", max: 3 },
   { label: "До 7 дней", max: 7 },
   { label: "До 14 дней", max: 14 },
+  { label: "Все сроки", max: Infinity },
 ];
 
 type Step = "search" | "brands" | "results";
@@ -46,7 +48,7 @@ export default function PriceModule() {
   const [parts, setParts] = useState<Part[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [supplierFilter, setSupplierFilter] = useState("");
-  const [deliveryFilter, setDeliveryFilter] = useState(Infinity);
+  const [deliveryFilter, setDeliveryFilter] = useState(0);
 
   const searchBrands = async () => {
     if (!query.trim()) return;
@@ -55,7 +57,7 @@ export default function PriceModule() {
     setBrands([]);
     setParts([]);
     setSelectedBrand(null);
-    setDeliveryFilter(Infinity);
+    setDeliveryFilter(0);
     setSupplierFilter("");
     setStep("search");
     try {
@@ -81,7 +83,7 @@ export default function PriceModule() {
     setError("");
     setParts([]);
     setStep("results");
-    setDeliveryFilter(Infinity);
+    setDeliveryFilter(0);
     setSupplierFilter("");
     try {
       const result = await searchByBrand(brand.article || query.trim(), brand.name, brand.bergId);
@@ -96,7 +98,7 @@ export default function PriceModule() {
 
   const reset = () => {
     setStep("search"); setBrands([]); setParts([]); setSelectedBrand(null);
-    setError(""); setSupplierFilter(""); setExpanded(null); setDeliveryFilter(Infinity);
+    setError(""); setSupplierFilter(""); setExpanded(null); setDeliveryFilter(0);
   };
 
   const onKey = (e: React.KeyboardEvent) => { if (e.key === "Enter") searchBrands(); };
@@ -125,8 +127,20 @@ export default function PriceModule() {
 
   const totalStocks = filteredParts.reduce((s, p) => s + p.stocks.length, 0);
   const allStockSuppliers = new Set<string>();
-  for (const p of parts) for (const s of p.stocks) { const sup = stockSupplier(s.description); if (sup) allStockSuppliers.add(sup); }
+  const allStocks = parts.flatMap((p) => p.stocks.filter((s) => !supplierFilter || stockSupplier(s.description) === supplierFilter));
+  for (const s of allStocks) { const sup = stockSupplier(s.description); if (sup) allStockSuppliers.add(sup); }
   const suppliers = Array.from(allStockSuppliers);
+
+  const countByDelivery = (max: number) => {
+    if (max === Infinity) return allStocks.length;
+    return allStocks.filter((s) => deliveryDays(s.delivery) <= max).length;
+  };
+
+  const countBySupplier = (sup: string) => {
+    const stocks = parts.flatMap((p) => p.stocks);
+    const filtered = deliveryFilter !== Infinity ? stocks.filter((s) => deliveryDays(s.delivery) <= deliveryFilter) : stocks;
+    return filtered.filter((s) => stockSupplier(s.description) === sup).length;
+  };
 
   return (
     <div>
@@ -157,7 +171,7 @@ export default function PriceModule() {
                 <span className="text-xs text-foreground font-bold">{selectedBrand.name}</span>
                 <span className="text-xs text-muted-foreground">{selectedBrand.article}</span>
                 {step === "results" && brands.length > 1 && (
-                  <button onClick={() => { setStep("brands"); setParts([]); setError(""); setSupplierFilter(""); setDeliveryFilter(Infinity); }}
+                  <button onClick={() => { setStep("brands"); setParts([]); setError(""); setSupplierFilter(""); setDeliveryFilter(0); }}
                     className="text-[10px] font-bold ml-1 hover:opacity-80" style={{ color: "hsl(var(--primary))" }}>(изменить)</button>
                 )}
               </>
@@ -214,14 +228,18 @@ export default function PriceModule() {
               </span>
 
               <div className="flex gap-1.5 ml-auto flex-wrap">
-                {DELIVERY_FILTERS.map((df) => (
-                  <button key={df.label} onClick={() => setDeliveryFilter(deliveryFilter === df.max ? Infinity : df.max)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${deliveryFilter === df.max
-                      ? "text-white" : "text-muted-foreground hover:bg-secondary"}`}
-                    style={deliveryFilter === df.max ? { background: "hsl(var(--primary))" } : {}}>
-                    {df.label}
-                  </button>
-                ))}
+                {DELIVERY_FILTERS.map((df) => {
+                  const cnt = countByDelivery(df.max);
+                  return (
+                    <button key={df.label} onClick={() => setDeliveryFilter(df.max)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 ${deliveryFilter === df.max
+                        ? "text-white" : "text-muted-foreground hover:bg-secondary"}`}
+                      style={deliveryFilter === df.max ? { background: "hsl(var(--primary))" } : {}}>
+                      {df.label}
+                      <span className={`text-[9px] px-1 py-0.5 rounded ${deliveryFilter === df.max ? "bg-white/20" : "bg-secondary"}`}>{cnt}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -233,11 +251,12 @@ export default function PriceModule() {
                 style={!supplierFilter ? { background: "hsl(var(--primary))" } : {}}>Все</button>
               {suppliers.map((s) => {
                 const sup = SUP[s] || { name: s, color: "" };
-                const cnt = parts.reduce((a, p) => a + p.stocks.filter((st) => stockSupplier(st.description) === s).length, 0);
+                const cnt = countBySupplier(s);
                 return (
                   <button key={s} onClick={() => setSupplierFilter(supplierFilter === s ? "" : s)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${supplierFilter === s ? sup.color : "text-muted-foreground hover:bg-secondary"}`}>
-                    {sup.name} ({cnt})
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 ${supplierFilter === s ? sup.color : "text-muted-foreground hover:bg-secondary"}`}>
+                    {sup.name}
+                    <span className={`text-[9px] px-1 py-0.5 rounded ${supplierFilter === s ? "bg-black/10" : "bg-secondary"}`}>{cnt}</span>
                   </button>
                 );
               })}
@@ -245,14 +264,16 @@ export default function PriceModule() {
           )}
 
           {filteredParts.length > 0 && (() => {
-            const selBrandNorm = selectedBrand ? selectedBrand.name.toLowerCase().replace(/[\s.\-_/\\]/g, "") : "";
+            const n = (s: string) => s.toLowerCase().replace(/[\s.\-_/\\]/g, "");
+            const selBrandNorm = selectedBrand ? n(selectedBrand.name) : "";
+            const selArticleNorm = selectedBrand ? n(selectedBrand.article || query) : "";
             let analogHeaderShown = false;
             return (
             <div className="space-y-3">
               {filteredParts.map((part, idx) => {
-                const isMainBrand = selBrandNorm && part.brand.toLowerCase().replace(/[\s.\-_/\\]/g, "") === selBrandNorm;
+                const isOriginal = selBrandNorm && n(part.brand) === selBrandNorm && n(part.partnumber) === selArticleNorm;
                 let showAnalogHeader = false;
-                if (!isMainBrand && !analogHeaderShown && selBrandNorm) {
+                if (!isOriginal && !analogHeaderShown && selBrandNorm) {
                   analogHeaderShown = true;
                   showAnalogHeader = true;
                 }
@@ -332,7 +353,7 @@ export default function PriceModule() {
             <div className="flex flex-col items-center justify-center gap-3 py-12">
               <Icon name="Filter" size={32} className="text-muted-foreground opacity-30" />
               <p className="text-sm text-muted-foreground">Нет предложений с выбранными фильтрами</p>
-              <button onClick={() => { setDeliveryFilter(Infinity); setSupplierFilter(""); }}
+              <button onClick={() => { setDeliveryFilter(0); setSupplierFilter(""); }}
                 className="text-xs font-bold hover:opacity-80" style={{ color: "hsl(var(--primary))" }}>Сбросить фильтры</button>
             </div>
           )}
